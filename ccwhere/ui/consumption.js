@@ -1,0 +1,426 @@
+/* Consumption tab: filter bar, strip, daily chart, league table, drill-down. */
+"use strict";
+
+(function () {
+  const css = (v) => getComputedStyle(document.documentElement)
+    .getPropertyValue(v).trim();
+  const COMPONENTS = [
+    ["cache_read", "cache read", "--cat-cache-read"],
+    ["input", "input", "--cat-input"],
+    ["output", "output", "--cat-output"],
+    ["cache_create", "cache create", "--cat-cache-create"],
+  ];
+  const LENS_A_TIP = "Lens A — total tokens of every session where this " +
+    "consumer appeared at least once. Tends to OVERSTATE: one long session " +
+    "inflates everything it touched.";
+  const LENS_B_TIP = "Lens B — only the tokens of the messages that directly " +
+    "invoked this consumer (a message can credit several consumers). Tends " +
+    "to UNDERSTATE: a skill's real cost lands downstream of the call.";
+  const FLAG_TIPS = {
+    agree: "Ranks high on BOTH lenses — the finding is robust. Safe to act on.",
+    disagree: "High on one lens, low on the other — likely a long-session " +
+      "artifact, not a real burner. Inspect its sessions before acting.",
+    n1: "Seen in a single session — one observation, no basis for a ranking.",
+  };
+
+  const state = { preset: "30d", from: null, to: null, builtins: false,
+                  shell: false, demoted: new Set(),
+                  projects: new Set(), drill: null, animated: false,
+                  sortKey: "message_tokens" };  // default: direct message tokens
+  let chart = null;
+
+  const { PRESETS, chipCSS, projLabel, tagCSS, bindTips } = window.ccw;
+  const presetRange = (p) => window.ccw.presetRange(p, [state.from, state.to]);
+
+  function fmtTok(n) {
+    if (n == null) return "—";
+    if (n >= 1e9) return (n / 1e9).toFixed(1) + "B";
+    if (n >= 1e6) return (n / 1e6).toFixed(1) + "M";
+    if (n >= 1e3) return (n / 1e3).toFixed(0) + "K";
+    return String(n);
+  }
+  function delta(cur, prev) {
+    if (prev == null || prev === 0) return "";
+    const pct = Math.round((cur - prev) / prev * 100);
+    // a tiny base makes percentages absurd; show the absolute instead
+    if (Math.abs(pct) > 999) return `vs ${fmtTok(prev)} previous`;
+    return `${pct >= 0 ? "+" : ""}${pct}% vs previous`;
+  }
+  function sparkSVG(arr) {
+    const mx = Math.max(...arr, 1);
+    const bars = arr.map((v, i) =>
+      v ? `<rect x="${i * 5}" y="${16 - v / mx * 13}" width="4" ` +
+          `height="${(v / mx * 13 + 2).toFixed(1)}" fill="#787774" rx="1"/>`
+        : `<rect x="${i * 5}" y="14.5" width="4" height="1.5" fill="#E3E1DC"/>`
+    ).join("");
+    return `<svg width="70" height="17" viewBox="0 0 70 17">${bars}</svg>`;
+  }
+  function bulletSVG(pct) {
+    if (pct == null) return "—";
+    const w = 180, x = (v) => v / 100 * w;
+    return `<svg width="${w + 58}" height="24">
+      <rect x="0" y="6" width="${x(60)}" height="12" fill="#D9D7D2"/>
+      <rect x="${x(60)}" y="6" width="${x(20)}" height="12" fill="#E8E6E1"/>
+      <rect x="${x(80)}" y="6" width="${x(20)}" height="12" fill="#F2F0EB"/>
+      <rect x="0" y="9" width="${x(Math.min(pct, 100))}" height="6" fill="#2F3437"/>
+      <rect x="${x(70)}" y="3" width="2.5" height="18" fill="#111"/>
+      <text x="${w + 8}" y="17" font-family="ui-monospace,Menlo" font-size="12"
+        fill="#2F3437">${pct}%</text></svg>`;
+  }
+
+  function render(el) {
+    el.innerHTML = `
+      <div id="cFiltersTime" style="display:flex;align-items:center;gap:8px;
+        flex-wrap:wrap;margin-bottom:10px"></div>
+      <div id="cFiltersProj" style="display:flex;align-items:center;gap:8px;
+        flex-wrap:wrap;margin-bottom:20px"></div>
+      <div class="strip" id="cStrip"></div>
+      <div style="display:flex;justify-content:space-between;align-items:baseline;
+        margin:28px 0 6px">
+        <div><div class="kicker">Where tokens flow</div>
+        <h1 id="cTitle">Daily consumption</h1></div>
+        <div style="text-align:right">
+          <div id="cCrumb" style="font-family:var(--mono);font-size:11.5px;
+            color:var(--muted)"></div>
+          <div id="cLegend" style="display:flex;gap:16px;justify-content:flex-end;
+            font-family:var(--mono);font-size:11px;color:var(--sec);
+            margin-top:6px"></div>
+        </div>
+      </div>
+      <div id="cPlot"><canvas id="cChart" height="90"></canvas></div>
+      <div id="cLeagueWrap" style="margin-top:30px">
+        <div class="kicker">League table · dual-lens attribution</div>
+        <h1 style="margin-bottom:8px">Consumers</h1>
+        <div id="cLeague"></div>
+      </div>`;
+    renderFilters(el);
+    load(el);
+  }
+
+  let projectIds = [];
+
+  function renderFilters(el) {
+    const bar = el.querySelector("#cFiltersTime");
+    const projBar = el.querySelector("#cFiltersProj");
+    bar.innerHTML = PRESETS.map(([k, label]) =>
+      `<span data-preset="${k}" style="${chipCSS(state.preset === k)}">${label}</span>`
+    ).join("") +
+      (state.preset === "custom"
+        ? ` <input type="date" id="cFrom" value="${state.from || ""}">
+            <input type="date" id="cTo" value="${state.to || ""}">` : "");
+    projBar.innerHTML =
+      projectIds.map((p) =>
+        `<span data-proj="${p}" style="${chipCSS(state.projects.has(p))}">` +
+        `${projLabel(p, projectIds)}</span>`).join("") +
+      `<span style="width:1px;height:18px;background:var(--border);margin:0 8px"></span>` +
+      `<span id="cBuiltins" data-tip="Built-in tools (Read, Bash, Edit…) ride in
+        nearly every session, so the Session lens hands them the whole corpus.
+        Off by default; they are not pruneable anyway."
+        style="${chipCSS(state.builtins)}">built-ins</span>` +
+      `<span id="cShell" data-tip="OS-shipped commands (grep, ls, sed…) —
+        detected by where the binary lives, not a curated list. Ubiquitous,
+        unprunable, and they drown the Session lens, so off by default.
+        Installed programs (vercel, openspec…) rank by default as CLI."
+        style="${chipCSS(state.shell)}">shell utilities</span>`;
+    const bi = projBar.querySelector("#cBuiltins");
+    bi.addEventListener("click", () => {
+      state.builtins = !state.builtins; renderFilters(el); load(el);
+    });
+    projBar.querySelector("#cShell").addEventListener("click", () => {
+      state.shell = !state.shell; renderFilters(el); load(el);
+    });
+    bindTips(projBar);
+    projBar.querySelectorAll("[data-proj]").forEach((c) =>
+      c.addEventListener("click", () => {
+        const p = c.dataset.proj;
+        state.projects.has(p) ? state.projects.delete(p) : state.projects.add(p);
+        state.drill = null; renderFilters(el); load(el);
+      }));
+    bar.querySelectorAll("[data-preset]").forEach((c) =>
+      c.addEventListener("click", () => {
+        state.preset = c.dataset.preset; state.drill = null;
+        renderFilters(el);
+        if (state.preset !== "custom" || (state.from && state.to)) load(el);
+      }));
+    ["cFrom", "cTo"].forEach((id) => {
+      const i = bar.querySelector("#" + id);
+      if (i) i.addEventListener("change", () => {
+        state.from = bar.querySelector("#cFrom").value || null;
+        state.to = bar.querySelector("#cTo").value || null;
+        if (state.from && state.to) load(el);
+      });
+    });
+  }
+
+  function qs() {
+    const [from, to] = presetRange(state.preset);
+    const p = new URLSearchParams();
+    if (from) p.set("from", from);
+    if (to) p.set("to", to);
+    if (state.projects.size) p.set("projects", [...state.projects].join(","));
+    if (state.builtins || state.shell) p.set("types", ["skill", "mcp", "cli"]
+      .concat(state.builtins ? ["builtin"] : [], state.shell ? ["shell"] : [])
+      .join(","));
+    return p.toString();
+  }
+
+  async function load(el) {
+    const r = await fetch("/api/consumption?" + qs(), {cache: "no-store"});
+    const data = await r.json();
+    state.demoted = new Set(data.demoted || []);
+    if (!projectIds.length && data.projects) {
+      projectIds = data.projects; renderFilters(el);
+    }
+    renderStrip(el, data.strip);
+    state.daily = data.daily;
+    renderDrill(el);
+    renderLeague(el, data.league);
+  }
+
+  function renderStrip(el, s) {
+    el.querySelector("#cStrip").innerHTML = `
+      <div><div class="label">Tokens</div>
+        <div class="stat">${fmtTok(s.tokens)}</div>
+        <div class="delta">${delta(s.tokens, s.tokens_prev) || "&nbsp;"}</div></div>
+      <div><div class="label">Sessions</div>
+        <div class="stat">${s.sessions}</div>
+        <div class="delta">${delta(s.sessions, s.sessions_prev) || "&nbsp;"}</div></div>
+      <div><div class="label">Top consumer</div>
+        <div class="stat" style="font-size:15px;line-height:2.1">
+          ${s.top ? s.top.consumer : "—"}
+          <small>${s.top ? s.top.type : ""}</small></div>
+        <div class="delta">${s.top && s.top.agree ? "top of both lenses" : ""}</div></div>
+      <div><div class="label">Cache hit rate · target 70%</div>
+        <div style="margin-top:8px">${bulletSVG(s.cache_rate_pct)}</div></div>`;
+  }
+
+  function renderDrill(el) {
+    const crumb = el.querySelector("#cCrumb");
+    const title = el.querySelector("#cTitle");
+    const plot = el.querySelector("#cPlot");
+    if (!state.drill) {
+      title.textContent = "Daily consumption";
+      crumb.innerHTML = "click a day for hours, an hour for events";
+      plot.innerHTML = `<canvas id="cChart" height="90"></canvas>`;
+      drawChart(plot.querySelector("canvas"), state.daily.map((d) => d.date),
+                state.daily, (i) => {
+                  state.drill = { date: state.daily[i].date };
+                  renderDrill(el);
+                });
+    } else {
+      // Day view: hourly chart stays put; hour details open beneath it.
+      const d = state.drill.date;
+      const hour = state.drill.hour;
+      title.textContent = d;
+      crumb.innerHTML = `<a href="#" id="cBack">← all days</a>` +
+        (hour == null ? ` · click an hour` : ``);
+      fetch(`/api/consumption/hours?date=${d}&` + qs(), {cache: "no-store"}).then((r) => r.json())
+        .then((hrs) => {
+          plot.innerHTML = `<canvas id="cChart" height="90"></canvas>
+            <div id="cDetails"></div>`;
+          const sel = hour == null ? -1 : hrs.findIndex((h) => h.hour === hour);
+          drawChart(plot.querySelector("canvas"),
+                    hrs.map((h) => `${String(h.hour).padStart(2, "0")}:00`),
+                    hrs, (i) => {
+                      state.drill = { date: d, hour: hrs[i].hour };
+                      renderDrill(el);
+                    }, sel);
+          if (hour != null) renderDetails(el, d, hour);
+        });
+      crumbNav(el);
+    }
+  }
+
+  function renderDetails(el, date, hour) {
+    const box = el.querySelector("#cDetails");
+    const label = `${String(hour).padStart(2, "0")}:00–` +
+      `${String((hour + 1) % 24).padStart(2, "0")}:00`;
+    box.innerHTML = `
+      <div style="border:1.5px solid #C9C7C1;border-radius:8px;
+        padding:16px 20px;margin-top:16px;background:var(--card)">
+        <div style="display:flex;justify-content:space-between;
+          align-items:baseline;margin-bottom:10px">
+          <span class="kicker">Drill-down · ${date} · ${label}</span>
+          <a href="#" id="cCloseDetails" style="font-family:var(--mono);
+            font-size:12px;color:var(--sec);text-decoration:none;
+            border:1px solid var(--border);border-radius:6px;
+            padding:2px 10px">close ×</a>
+        </div>
+        <div id="cDetailsBody" style="color:var(--muted);
+          font-size:12.5px">loading…</div>
+      </div>`;
+    box.querySelector("#cCloseDetails").addEventListener("click", (e) => {
+      e.preventDefault();
+      state.drill = { date };
+      renderDrill(el);
+    });
+    fetch(`/api/consumption/events?date=${date}&hour=${hour}&` + qs(), {cache: "no-store"})
+      .then((r) => r.json()).then((ev) => {
+        el.querySelector("#cDetailsBody").innerHTML = ev.length
+          ? eventsTable(ev)
+          : `<div style="padding:24px;text-align:center;color:var(--muted)">
+              no activity this hour</div>`;
+      });
+  }
+
+  function crumbNav(el) {
+    const back = el.querySelector("#cBack");
+    if (back) back.addEventListener("click", (e) => {
+      e.preventDefault(); state.drill = null; renderDrill(el); });
+  }
+
+  function drawChart(canvas, labels, rows, onClick, selected = -1) {
+    if (chart) { chart.destroy(); chart = null; }
+    const legend = document.getElementById("cLegend");
+    legend.innerHTML = COMPONENTS.map(([k, label, v]) =>
+      `<span><i style="display:inline-block;width:9px;height:9px;` +
+      `border-radius:2px;background:${css(v)};margin-right:5px"></i>${label}</span>`
+    ).join("");
+    chart = new Chart(canvas, {
+      type: "bar",
+      data: { labels,
+        datasets: COMPONENTS.map(([k, label, v]) => ({
+          label, data: rows.map((r) => r[k]), backgroundColor: css(v),
+          stack: "t", borderRadius: 2, maxBarThickness: 56,
+          borderColor: "#111",
+          borderWidth: rows.map((_, i) => i === selected ? 1.5 : 0) })) },
+      options: {
+        animation: state.animated ? false : { duration: 500 },
+        plugins: { legend: { display: false }, tooltip: {
+          callbacks: { label: (c) => `${c.dataset.label}: ${fmtTok(c.raw)}` } } },
+        onClick: (e, els) => { if (els.length) onClick(els[0].index); },
+        scales: {
+          x: { stacked: true, grid: { display: false },
+               ticks: { font: { family: "ui-monospace, Menlo", size: 10.5 } } },
+          y: { stacked: true, grid: { color: "#F2F1EE" }, border: { display: false },
+               ticks: { callback: (v) => fmtTok(v),
+                        font: { family: "ui-monospace, Menlo", size: 10.5 } } },
+        },
+      },
+    });
+    state.animated = true;  // one-time render animation only
+  }
+
+  function eventsTable(ev) {
+    return `<table style="width:100%;border-collapse:collapse">
+      <thead><tr>
+        ${["session", "project", "consumer", "", "calls", "tokens", "duration"]
+          .map((h, i) => `<th style="font-family:var(--mono);font-size:10.5px;
+            letter-spacing:.06em;text-transform:uppercase;color:var(--muted);
+            font-weight:500;text-align:${i > 2 ? "right" : "left"};
+            padding:0 12px 8px 0;border-bottom:1px solid var(--border)">${h}</th>`)
+          .join("")}</tr></thead>
+      <tbody>${ev.map((e) => `<tr>
+        <td class="num" style="padding:8px 12px 8px 0;color:var(--muted);
+          font-size:11px">${e.session.slice(0, 8)}…</td>
+        <td class="num" style="font-size:12px">${projLabel(e.project, projectIds)}</td>
+        <td class="num" style="font-size:12px">${e.consumer}</td>
+        <td><span style="font-family:var(--mono);font-size:10px;
+          text-transform:uppercase;border-radius:9999px;padding:2px 9px;
+          background:${tagCSS(e.type)}">
+          ${e.type}</span></td>
+        <td class="num" style="text-align:right">${e.calls}</td>
+        <td class="num" style="text-align:right">${fmtTok(e.tokens)}</td>
+        <td class="num" style="text-align:right">${e.duration_ms ?
+          (e.duration_ms / 1000).toFixed(1) + "s" : "—"}</td>
+      </tr>`).join("")}</tbody></table>`;
+  }
+
+  function renderLeague(el, rows) {
+    rows = [...rows].sort((a, b) => b[state.sortKey] - a[state.sortKey]);
+    const maxA = Math.max(...rows.map((r) => r.session_tokens), 1);
+    const maxB = Math.max(...rows.map((r) => r.message_tokens), 1);
+    const sortMark = (k) => state.sortKey === k ? " ▾" : "";
+    const sortable = (k) => `data-sort="${k}" style="cursor:pointer;` +
+      (state.sortKey === k ? "color:var(--ink);" : "") + `"`;
+    const flag = (f) => f === "agree"
+      ? `<span data-tip="${FLAG_TIPS.agree}" style="font-family:var(--mono);
+          font-size:10px;color:var(--sec);border:1px solid var(--border);
+          border-radius:9999px;padding:2px 8px">both lenses</span>`
+      : f ? `<span data-tip="${FLAG_TIPS[f]}" style="font-family:var(--mono);
+          font-size:10px;background:var(--red-bg);color:var(--red);
+          border-radius:9999px;padding:2px 8px">
+          ${f === "n1" ? "N=1" : "lenses disagree"}</span>` : "";
+    const bar = (v, mx, dim) => `<span style="display:inline-block;height:8px;
+      border-radius:2px;background:var(--ink);opacity:${dim ? ".45" : ".85"};
+      width:${Math.max(v / mx * 120, 2)}px;margin-right:8px;vertical-align:1px">
+      </span>`;
+    el.querySelector("#cLeague").innerHTML = `
+      <table style="width:100%;border-collapse:collapse">
+      <thead><tr>
+        <th style="text-align:left;font-family:var(--mono);font-size:10.5px;
+          letter-spacing:.06em;text-transform:uppercase;color:var(--muted);
+          font-weight:500;padding-bottom:8px;border-bottom:1px solid var(--border)">
+          consumer</th>
+        <th></th>
+        <th style="text-align:right;font-family:var(--mono);font-size:10.5px;
+          letter-spacing:.06em;text-transform:uppercase;color:var(--muted);
+          font-weight:500;border-bottom:1px solid var(--border)">
+          <span ${sortable("sessions")}>sessions${sortMark("sessions")}</span></th>
+        <th style="text-align:right;font-family:var(--mono);font-size:10.5px;
+          letter-spacing:.06em;text-transform:uppercase;color:var(--muted);
+          font-weight:500;border-bottom:1px solid var(--border)">
+          <span data-tip="${LENS_A_TIP}" ${sortable("session_tokens")}>
+          <span style="border-bottom:1px dotted var(--muted)">tokens of
+          sessions involving</span>${sortMark("session_tokens")}</span></th>
+        <th style="text-align:right;font-family:var(--mono);font-size:10.5px;
+          letter-spacing:.06em;text-transform:uppercase;color:var(--muted);
+          font-weight:500;border-bottom:1px solid var(--border)">
+          <span data-tip="${LENS_B_TIP}" ${sortable("message_tokens")}>
+          <span style="border-bottom:1px dotted var(--muted)">direct message
+          tokens</span>${sortMark("message_tokens")}</span></th>
+        <th style="text-align:right;font-family:var(--mono);font-size:10.5px;
+          letter-spacing:.06em;text-transform:uppercase;color:var(--muted);
+          font-weight:500;border-bottom:1px solid var(--border)">14d</th>
+        <th style="border-bottom:1px solid var(--border)"></th></tr></thead>
+      <tbody>${rows.slice(0, 30)
+        // pinned: every demoted item stays restorable past the row cut
+        .concat(rows.slice(30).filter((r) => state.demoted.has(r.consumer)))
+        .map((r) => {
+        const demoted = r.type === "shell" && state.demoted.has(r.consumer);
+        const ov = r.type === "cli"
+          ? ` data-ov="1" data-consumer="${r.consumer}" data-tip="Click to move
+              to shell utilities — out of this default view, restorable there.
+              Saved to ~/.ccwhere/overrides.json" style="cursor:pointer;`
+          : demoted
+          ? ` data-ov="0" data-consumer="${r.consumer}" data-tip="Demoted by
+              you — click to restore to the default view" style="cursor:pointer;
+              border:1px dashed var(--muted);`
+          : ` style="`;
+        return `<tr>
+        <td class="num" style="padding:9px 12px 9px 0;font-size:12.5px;
+          border-bottom:1px solid #F2F1EE">${r.consumer}</td>
+        <td style="border-bottom:1px solid #F2F1EE"><span${ov}
+          font-family:var(--mono);font-size:10px;text-transform:uppercase;
+          border-radius:9999px;padding:2px 9px;background:${tagCSS(r.type)}">${
+            demoted ? "shell ·you" : r.type}</span></td>
+        <td class="num" style="text-align:right;font-size:12px;
+          border-bottom:1px solid #F2F1EE">${r.sessions}</td>
+        <td class="num" style="text-align:right;font-size:12px;white-space:nowrap;
+          border-bottom:1px solid #F2F1EE">${bar(r.session_tokens, maxA)}
+          ${fmtTok(r.session_tokens)}</td>
+        <td class="num" style="text-align:right;font-size:12px;white-space:nowrap;
+          border-bottom:1px solid #F2F1EE">${bar(r.message_tokens, maxB, 1)}
+          ${fmtTok(r.message_tokens)}</td>
+        <td style="text-align:right;border-bottom:1px solid #F2F1EE">
+          ${sparkSVG(r.spark)}</td>
+        <td style="text-align:right;border-bottom:1px solid #F2F1EE">
+          ${flag(r.flag)}</td>
+      </tr>`; }).join("")}</tbody></table>`;
+    el.querySelectorAll("[data-sort]").forEach((h) =>
+      h.addEventListener("click", () => {
+        state.sortKey = h.dataset.sort;
+        renderLeague(el, rows);
+      }));
+    el.querySelectorAll("[data-ov]").forEach((t) =>
+      t.addEventListener("click", async () => {
+        await fetch("/api/overrides", {method: "POST", cache: "no-store",
+          body: JSON.stringify({consumer: t.dataset.consumer,
+                                demoted: t.dataset.ov === "1"})});
+        load(el);
+      }));
+    bindTips(el);
+  }
+
+  window.renderConsumption = render;
+})();

@@ -1,0 +1,7 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+.DS_Store
+# personal build history stays in the source workspace, not the public repo
+openspec/changes/archive/

@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ccwhere"
+version = "0.1.0"
+description = "See where your tokens got burned - local, read-only observability for Claude Code"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+readme = "README.md"
+urls = { Homepage = "https://github.com/dempseydata/CCwhere" }
+# zero runtime dependencies - stdlib only (PRD success metric)
+dependencies = []
+
+[project.scripts]
+ccwhere = "ccwhere.__main__:main"
+
+[tool.setuptools]
+packages = ["ccwhere"]
+
+[tool.setuptools.package-data]
+ccwhere = ["ui/*", "ui/vendor/*"]

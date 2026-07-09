@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ccwhere</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="tokens.css">
+<style>
+  .frame { max-width: 1080px; margin: 32px auto 64px; background: var(--card);
+           border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+  header.app { display: flex; align-items: baseline; gap: 28px;
+               padding: 22px 32px 0; border-bottom: 1px solid var(--border); }
+  .wordmark { font-family: var(--mono); font-size: 15px; font-weight: 600; }
+  nav { display: flex; gap: 20px; flex: 1; }
+  nav a { font-size: 13px; color: var(--sec); text-decoration: none;
+          padding-bottom: 10px; border-bottom: 2px solid transparent; }
+  nav a.on { color: var(--ink); border-bottom-color: var(--ink); font-weight: 600; }
+  .sync { display: flex; align-items: center; gap: 14px; padding-bottom: 8px; }
+  .sync .meta { font-family: var(--mono); font-size: 11px; color: var(--muted);
+                text-align: right; line-height: 1.5; }
+  .sync .meta .firing { color: var(--red); font-weight: 600; }
+  .auto { font-family: var(--mono); font-size: 10.5px; color: var(--muted);
+          display: flex; align-items: center; gap: 5px; cursor: pointer; }
+  main { padding: 26px 32px; min-height: 360px; }
+  .placeholder { border: 1px dashed var(--border); border-radius: 8px;
+                 padding: 48px 32px; text-align: center; color: var(--muted);
+                 font-size: 13px; margin-top: 16px; }
+  .strip { display: grid; grid-template-columns: repeat(4, 1fr); margin-top: 16px; }
+  .strip > div { padding: 4px 24px 0 0; }
+  .strip > div + div { border-left: 1px solid var(--border); padding-left: 24px; }
+  .stat { font-family: var(--mono); font-size: 24px; font-weight: 600;
+          letter-spacing: -0.02em; }
+  .label { font-size: 12px; color: var(--sec); }
+  .delta { font-family: var(--mono); font-size: 11.5px; color: var(--sec); }
+</style>
+</head>
+<body>
+<div class="frame">
+  <header class="app">
+    <div class="wordmark">ccwhere</div>
+    <nav id="nav">
+      <a href="#consumption">Consumption</a>
+      <a href="#ledger">Context ledger</a>
+      <a href="#performance">Performance</a>
+      <a href="#live">Live</a>
+    </nav>
+    <div class="sync">
+      <label class="auto"><input type="checkbox" id="autoRefresh">auto 30s</label>
+      <div class="meta"><span id="syncAge">—</span><br><span id="canary">—</span></div>
+      <button class="primary" id="refresh">Refresh</button>
+    </div>
+  </header>
+  <main id="main"></main>
+</div>
+<script src="vendor/chart.umd.js"></script>
+<script src="filters.js"></script>
+<script src="consumption.js"></script>
+<script src="ledger.js"></script>
+<script src="performance.js"></script>
+<script src="live.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
