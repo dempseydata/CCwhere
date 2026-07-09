@@ -55,9 +55,26 @@ The dashboard opens at `http://127.0.0.1:8917` (`--port` to change, `--no-browse
 - Writes: `~/.ccwhere/` only — the disposable cache plus `overrides.json`, the human-readable file behind the "demote to shell utilities" control.
 - Network: none. The server binds to 127.0.0.1.
 
+## How consumers are classified — and how to overrule it
+
+A **consumer** is anything that uses your tokens *and that you could act on* — uninstall, slim down, replace. Every tool call in your history is classified into one of five types at ingest:
+
+| Type | What it is | Example | In the default ranking? |
+| --- | --- | --- | --- |
+| Skill | a named capability invoked in a session | `write-prd` | yes |
+| MCP server | a Model Context Protocol server (its tools roll up to it) | `playwright` | yes |
+| CLI program | a program *you installed*, run through the Bash tool | `vercel`, `gh` | yes |
+| Shell utility | an OS-shipped command | `grep`, `ls` | behind a toggle |
+| Built-in tool | Claude Code's own tools | `Read`, `Edit` | behind a toggle |
+
+The first three rank by default because they're actionable. Shell utilities and built-ins sit behind toggles for two reasons: you can't prune `grep`, and because they appear in nearly every session, the session lens hands them the entire corpus and they drown the ranking.
+
+The CLI-vs-shell line is drawn by **where the binary lives** (OS directories = shell utility, anywhere else = CLI program) — not by a hand-curated list of "boring commands". That rule is honest but not always *your* truth: a Homebrew-installed `git` or `node` classifies as an installed CLI program and ranks by default, even if you consider it furniture.
+
+**So the final word is yours.** Click the `cli` tag on any row in the league table to demote that program to the shell-utilities bucket — it leaves the default ranking immediately. Demoted rows stay visible under the shell-utilities toggle with a distinct `shell ·you` tag; click it to restore. Your choices live in `~/.ccwhere/overrides.json` (human-readable), apply at query time only — the stored data keeps the provenance truth — and survive cache rebuilds. Demotion applies only to CLI programs: skills and MCP servers are always actionable, and the other two types are already out of the default view.
+
 ## Notes
 
-- Consumer classification (skill / MCP server / CLI program / shell utility / built-in) happens at ingest; CLI programs are split from OS-shipped shell utilities by binary provenance, not by a curated list.
 - Specifications for every capability live in `openspec/specs/` — the honest-numbers rules above are requirements there, not aspirations. System documentation (architecture, flows, permissions posture, configuration) lives in `documentation/`.
 - Built and dogfooded by one operator; expect rough edges. Issues welcome.
 
