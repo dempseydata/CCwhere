@@ -70,7 +70,8 @@ class Handler(BaseHTTPRequestHandler):
                 "projects": q["projects"][0].split(",")
                 if q.get("projects", [""])[0] else None,
                 "types": q["types"][0].split(",")
-                if q.get("types", [""])[0] else None}
+                if q.get("types", [""])[0] else None,
+                "fresh": q.get("fresh", ["0"])[0] == "1"}
 
     def do_GET(self):
         u = urlparse(self.path)
@@ -130,14 +131,34 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/consumption":
             f = self._filters(q)
             f["demoted"] = db.load_overrides(self.server.db_path)
+            prices = db.load_prices(self.server.db_path)
             conn = db.connect(self.server.db_path)
             try:
+                mrows = queries.models(conn, f)
+                cost = queries.priced(mrows, prices)
+                pf = queries.prev_window(f)
+                cost["usd_prev"] = queries.priced(
+                    queries.models(conn, pf), prices)["usd"] if pf else None
                 return self._json({
                     "strip": queries.strip(conn, f),
                     "daily": queries.daily(conn, f),
                     "league": queries.league(conn, f),
+                    "models": mrows,
+                    "cost": cost,
                     "projects": queries.project_list(conn),
                     "demoted": sorted(f["demoted"])})
+            finally:
+                conn.close()
+        if path == "/api/consumption/models":
+            f = self._filters(q)
+            prices = db.load_prices(self.server.db_path)
+            conn = db.connect(self.server.db_path)
+            try:
+                rows = queries.models(
+                    conn, f, date=q.get("date", [None])[0],
+                    hour=int(q["hour"][0]) if q.get("hour") else None)
+                return self._json({"models": rows,
+                                   "cost": queries.priced(rows, prices)})
             finally:
                 conn.close()
         if path == "/api/consumption/hours":

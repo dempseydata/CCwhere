@@ -20,7 +20,7 @@ The **only** endpoint that writes outside the cache: `{"consumer", "demoted"}` u
 
 ## 4. Read API (`GET /api/*`)
 
-health, summary, consumption (+hours/events), ledger, performance, live — all read-only. Every response carries `Cache-Control: no-store`: a stale dashboard is a silent lie.
+health, summary, consumption (+hours/events/models), ledger, performance, live — all read-only. Every response carries `Cache-Control: no-store`: a stale dashboard is a silent lie.
 
 Trust-boundary notes:
 

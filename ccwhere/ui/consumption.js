@@ -23,22 +23,18 @@
     n1: "Seen in a single session — one observation, no basis for a ranking.",
   };
 
-  const state = { preset: "30d", from: null, to: null, builtins: false,
-                  shell: false, demoted: new Set(),
+  const state = { preset: "30d", from: null, to: null,
+                  types: { skill: true, mcp: true, cli: true,
+                           builtin: false, shell: false },
+                  fresh: false,
+                  demoted: new Set(), hidden: new Set(),
                   projects: new Set(), drill: null, animated: false,
                   sortKey: "message_tokens" };  // default: direct message tokens
-  let chart = null;
+  let charts = [];
 
-  const { PRESETS, chipCSS, projLabel, tagCSS, bindTips } = window.ccw;
+  const { PRESETS, chipCSS, projLabel, tagCSS, bindTips, fmtTok } = window.ccw;
   const presetRange = (p) => window.ccw.presetRange(p, [state.from, state.to]);
 
-  function fmtTok(n) {
-    if (n == null) return "—";
-    if (n >= 1e9) return (n / 1e9).toFixed(1) + "B";
-    if (n >= 1e6) return (n / 1e6).toFixed(1) + "M";
-    if (n >= 1e3) return (n / 1e3).toFixed(0) + "K";
-    return String(n);
-  }
   function delta(cur, prev) {
     if (prev == null || prev === 0) return "";
     const pct = Math.round((cur - prev) / prev * 100);
@@ -88,13 +84,57 @@
         </div>
       </div>
       <div id="cPlot"><canvas id="cChart" height="90"></canvas></div>
+      <div id="cModels" style="margin-top:28px"></div>
       <div id="cLeagueWrap" style="margin-top:30px">
         <div class="kicker">League table · dual-lens attribution</div>
         <h1 style="margin-bottom:8px">Consumers</h1>
+        <div id="cTypes" style="display:flex;align-items:center;gap:8px;
+          flex-wrap:wrap;margin-bottom:12px"></div>
         <div id="cLeague"></div>
       </div>`;
     renderFilters(el);
+    renderTypes(el);
     load(el);
+  }
+
+  const TYPE_CHIPS = [
+    ["skill", "skills", null],
+    ["mcp", "MCP servers", null],
+    ["cli", "CLI programs", null],
+    ["builtin", "built-ins", "Built-in tools (Read, Bash, Edit…) ride in " +
+      "nearly every session, so the Session lens hands them the whole " +
+      "corpus and they drown the ranking. Not pruneable anyway."],
+    ["shell", "shell utilities", "OS-shipped commands (grep, ls, sed…) — " +
+      "detected by where the binary lives, not a curated list. Ubiquitous " +
+      "and unprunable, so off by default. Includes anything you demote."],
+  ];
+
+  function renderTypes(el) {
+    const box = el.querySelector("#cTypes");
+    box.innerHTML = `<span style="font-family:var(--mono);font-size:11px;
+        color:var(--muted)">types</span>` +
+      TYPE_CHIPS.map(([k, label, tip]) =>
+        `<span data-type="${k}"${tip ? ` data-tip="${tip}"` : ""}
+          style="${chipCSS(state.types[k])}">${label}</span>`).join("") +
+      `<span style="width:1px;height:18px;background:var(--border);
+        margin:0 8px"></span>
+      <span style="font-family:var(--mono);font-size:11px;
+        color:var(--muted)">counting</span>
+      <span id="cFresh" data-tip="Count only input + output — the new work a
+        consumer caused — instead of the full context of its invoking
+        messages. Re-ranks both lenses; agreement flags recompute.
+        Experimental: being evaluated, may not stay."
+        style="${chipCSS(state.fresh)}">fresh work only</span>`;
+    box.querySelector("#cFresh").addEventListener("click", () => {
+      state.fresh = !state.fresh;
+      renderTypes(el); load(el);
+    });
+    box.querySelectorAll("[data-type]").forEach((c) =>
+      c.addEventListener("click", () => {
+        state.types[c.dataset.type] = !state.types[c.dataset.type];
+        renderTypes(el); load(el);
+      }));
+    bindTips(box);
   }
 
   let projectIds = [];
@@ -111,24 +151,7 @@
     projBar.innerHTML =
       projectIds.map((p) =>
         `<span data-proj="${p}" style="${chipCSS(state.projects.has(p))}">` +
-        `${projLabel(p, projectIds)}</span>`).join("") +
-      `<span style="width:1px;height:18px;background:var(--border);margin:0 8px"></span>` +
-      `<span id="cBuiltins" data-tip="Built-in tools (Read, Bash, Edit…) ride in
-        nearly every session, so the Session lens hands them the whole corpus.
-        Off by default; they are not pruneable anyway."
-        style="${chipCSS(state.builtins)}">built-ins</span>` +
-      `<span id="cShell" data-tip="OS-shipped commands (grep, ls, sed…) —
-        detected by where the binary lives, not a curated list. Ubiquitous,
-        unprunable, and they drown the Session lens, so off by default.
-        Installed programs (vercel, openspec…) rank by default as CLI."
-        style="${chipCSS(state.shell)}">shell utilities</span>`;
-    const bi = projBar.querySelector("#cBuiltins");
-    bi.addEventListener("click", () => {
-      state.builtins = !state.builtins; renderFilters(el); load(el);
-    });
-    projBar.querySelector("#cShell").addEventListener("click", () => {
-      state.shell = !state.shell; renderFilters(el); load(el);
-    });
+        `${projLabel(p, projectIds)}</span>`).join("");
     bindTips(projBar);
     projBar.querySelectorAll("[data-proj]").forEach((c) =>
       c.addEventListener("click", () => {
@@ -158,9 +181,11 @@
     if (from) p.set("from", from);
     if (to) p.set("to", to);
     if (state.projects.size) p.set("projects", [...state.projects].join(","));
-    if (state.builtins || state.shell) p.set("types", ["skill", "mcp", "cli"]
-      .concat(state.builtins ? ["builtin"] : [], state.shell ? ["shell"] : [])
-      .join(","));
+    const on = Object.keys(state.types).filter((t) => state.types[t]);
+    // "__none__" matches nothing: an all-off selection means an empty league,
+    // not a silent fall back to the server default
+    p.set("types", on.length ? on.join(",") : "__none__");
+    if (state.fresh) p.set("fresh", "1");
     return p.toString();
   }
 
@@ -171,17 +196,36 @@
     if (!projectIds.length && data.projects) {
       projectIds = data.projects; renderFilters(el);
     }
-    renderStrip(el, data.strip);
+    renderStrip(el, data.strip, data.cost);
     state.daily = data.daily;
+    state.windowModels = data.models;
+    state.windowCost = data.cost;
     renderDrill(el);
+    refreshModels(el);
     renderLeague(el, data.league);
   }
 
-  function renderStrip(el, s) {
+  const fmtUsd = (v) => v == null ? "—"
+    : "$" + (v >= 1000 ? Math.round(v).toLocaleString() : v.toFixed(2));
+
+  function renderStrip(el, s, cost) {
+    const cov = cost && cost.coverage_pct;
     el.querySelector("#cStrip").innerHTML = `
       <div><div class="label">Tokens</div>
         <div class="stat">${fmtTok(s.tokens)}</div>
-        <div class="delta">${delta(s.tokens, s.tokens_prev) || "&nbsp;"}</div></div>
+        <div class="delta">${fmtTok(s.fresh)} fresh work${
+          delta(s.tokens, s.tokens_prev)
+            ? " · " + delta(s.tokens, s.tokens_prev) : ""}</div></div>
+      <div><div class="label"><span data-tip="What this window would cost at
+          public list price per token. Models with no public list price are
+          excluded, never guessed — coverage says how much of the token
+          volume is priced. Add prices for other models under 'prices' in
+          ~/.ccwhere/overrides.json." style="border-bottom:1px dotted
+          var(--muted);cursor:help">≈ Cost · list price</span></div>
+        <div class="stat">${fmtUsd(cost && cost.usd)}</div>
+        <div class="delta">${cov != null && cov < 100
+          ? `covers ${cov}% of tokens`
+          : delta(cost && cost.usd, cost && cost.usd_prev) || "&nbsp;"}</div></div>
       <div><div class="label">Sessions</div>
         <div class="stat">${s.sessions}</div>
         <div class="delta">${delta(s.sessions, s.sessions_prev) || "&nbsp;"}</div></div>
@@ -192,6 +236,72 @@
         <div class="delta">${s.top && s.top.agree ? "top of both lenses" : ""}</div></div>
       <div><div class="label">Cache hit rate · target 70%</div>
         <div style="margin-top:8px">${bulletSVG(s.cache_rate_pct)}</div></div>`;
+    bindTips(el.querySelector("#cStrip"));
+  }
+
+  async function refreshModels(el) {
+    // the by-model table follows the chart drill; closing restores the
+    // window view from the cached main payload
+    if (!state.drill) {
+      renderModels(el, state.windowModels, state.windowCost, "");
+      return;
+    }
+    const p = new URLSearchParams(qs());
+    p.set("date", state.drill.date);
+    if (state.drill.hour != null) p.set("hour", state.drill.hour);
+    const r = await (await fetch("/api/consumption/models?" + p,
+                                 {cache: "no-store"})).json();
+    const scope = state.drill.hour != null
+      ? `${state.drill.date} · ${String(state.drill.hour).padStart(2, "0")}:00`
+      : state.drill.date;
+    renderModels(el, r.models, r.cost, scope);
+  }
+
+  function renderModels(el, models, cost, scope) {
+    const box = el.querySelector("#cModels");
+    if (!models || !models.length) { box.innerHTML = ""; return; }
+    const tot = (r) => r.input + r.output + r.cache_read + r.cache_create;
+    const maxT = Math.max(...models.map(tot), 1);
+    const cov = cost && cost.coverage_pct;
+    const num = (v) => `<td class="num" style="text-align:right;font-size:12px;
+      border-bottom:1px solid #F2F1EE">${fmtTok(v)}</td>`;
+    box.innerHTML = `
+      <div class="kicker" style="margin-bottom:6px">By model${scope
+        ? ` · ${scope}` : ""} · ≈ cost at
+        public list price${cov != null && cov < 100 ? ` · priced coverage
+        ${cov}% — unpriced models show —` : ""}</div>
+      <table style="width:100%;border-collapse:collapse"><thead>
+      <tr>${[["", 3], ["fresh work", 2], ["context re-read", 2], ["", 2]]
+        .map(([g, span]) => `<th colspan="${span}" style="text-align:center;
+          font-family:var(--mono);font-size:9.5px;letter-spacing:.08em;
+          text-transform:uppercase;color:var(--muted);font-weight:500;
+          ${g ? "border-bottom:1px solid var(--border)" : ""};
+          padding:0 8px 3px">${g}</th>`).join("")}</tr>
+      <tr>
+        ${["model", "", "msgs", "input", "output", "cache read",
+           "cache create", "total", "≈ cost"].map((h, i) =>
+          `<th style="text-align:${i < 2 ? "left" : "right"};
+            font-family:var(--mono);font-size:10.5px;letter-spacing:.06em;
+            text-transform:uppercase;color:var(--muted);font-weight:500;
+            padding:4px 0 6px;border-bottom:1px solid var(--border)">${h}</th>`
+        ).join("")}</tr></thead>
+      <tbody>${models.map((r) => `<tr>
+        <td class="num" style="padding:8px 12px 8px 0;font-size:12.5px;
+          border-bottom:1px solid #F2F1EE">${r.model
+            .replace(/&/g, "&amp;").replace(/</g, "&lt;")}</td>
+        <td style="border-bottom:1px solid #F2F1EE;width:130px">
+          <div style="height:6px;border-radius:2px;background:var(--ink);
+            opacity:.75;width:${Math.max(tot(r) / maxT * 110, 2).toFixed(0)}px">
+          </div></td>
+        <td class="num" style="text-align:right;font-size:12px;
+          border-bottom:1px solid #F2F1EE">${r.messages}</td>
+        ${num(r.input)}${num(r.output)}${num(r.cache_read)}${num(r.cache_create)}
+        <td class="num" style="text-align:right;font-size:12px;font-weight:600;
+          border-bottom:1px solid #F2F1EE">${fmtTok(tot(r))}</td>
+        <td class="num" style="text-align:right;font-size:12px;
+          ${r.usd == null ? "color:var(--muted)" : ""};
+          border-bottom:1px solid #F2F1EE">${fmtUsd(r.usd)}</td>
+      </tr>`).join("")}</tbody></table>`;
   }
 
   function renderDrill(el) {
@@ -201,11 +311,12 @@
     if (!state.drill) {
       title.textContent = "Daily consumption";
       crumb.innerHTML = "click a day for hours, an hour for events";
-      plot.innerHTML = `<canvas id="cChart" height="90"></canvas>`;
-      drawChart(plot.querySelector("canvas"), state.daily.map((d) => d.date),
+      plot.innerHTML = `<div id="cCharts"></div>`;
+      drawChart(plot.querySelector("#cCharts"), state.daily.map((d) => d.date),
                 state.daily, (i) => {
                   state.drill = { date: state.daily[i].date };
                   renderDrill(el);
+                  refreshModels(el);
                 });
     } else {
       // Day view: hourly chart stays put; hour details open beneath it.
@@ -216,14 +327,15 @@
         (hour == null ? ` · click an hour` : ``);
       fetch(`/api/consumption/hours?date=${d}&` + qs(), {cache: "no-store"}).then((r) => r.json())
         .then((hrs) => {
-          plot.innerHTML = `<canvas id="cChart" height="90"></canvas>
+          plot.innerHTML = `<div id="cCharts"></div>
             <div id="cDetails"></div>`;
           const sel = hour == null ? -1 : hrs.findIndex((h) => h.hour === hour);
-          drawChart(plot.querySelector("canvas"),
+          drawChart(plot.querySelector("#cCharts"),
                     hrs.map((h) => `${String(h.hour).padStart(2, "0")}:00`),
                     hrs, (i) => {
                       state.drill = { date: d, hour: hrs[i].hour };
                       renderDrill(el);
+                      refreshModels(el);
                     }, sel);
           if (hour != null) renderDetails(el, d, hour);
         });
@@ -253,6 +365,7 @@
       e.preventDefault();
       state.drill = { date };
       renderDrill(el);
+      refreshModels(el);
     });
     fetch(`/api/consumption/events?date=${date}&hour=${hour}&` + qs(), {cache: "no-store"})
       .then((r) => r.json()).then((ev) => {
@@ -266,38 +379,77 @@
   function crumbNav(el) {
     const back = el.querySelector("#cBack");
     if (back) back.addEventListener("click", (e) => {
-      e.preventDefault(); state.drill = null; renderDrill(el); });
+      e.preventDefault(); state.drill = null;
+      renderDrill(el); refreshModels(el); });
   }
 
-  function drawChart(canvas, labels, rows, onClick, selected = -1) {
-    if (chart) { chart.destroy(); chart = null; }
+  // small multiples: cache is ~99% of the stack, so the two stories get
+  // their own panels and their own honest y scales (operator pick, Few rule)
+  const PANELS = [
+    ["context re-read", ["cache_read", "cache_create"]],
+    ["fresh work", ["input", "output"]],
+  ];
+  const COMP = Object.fromEntries(COMPONENTS.map(
+    ([k, label, v]) => [k, { label, v }]));
+
+  function drawChart(wrap, labels, rows, onClick, selected = -1) {
+    charts.forEach((c) => c.destroy());
+    charts = [];
     const legend = document.getElementById("cLegend");
     legend.innerHTML = COMPONENTS.map(([k, label, v]) =>
-      `<span><i style="display:inline-block;width:9px;height:9px;` +
+      `<span data-comp="${k}" data-tip="Click to hide/show this component
+        within its panel."
+        style="cursor:pointer;opacity:${state.hidden.has(k) ? ".35" : "1"}">
+      <i style="display:inline-block;width:9px;height:9px;` +
       `border-radius:2px;background:${css(v)};margin-right:5px"></i>${label}</span>`
     ).join("");
-    chart = new Chart(canvas, {
-      type: "bar",
-      data: { labels,
-        datasets: COMPONENTS.map(([k, label, v]) => ({
-          label, data: rows.map((r) => r[k]), backgroundColor: css(v),
-          stack: "t", borderRadius: 2, maxBarThickness: 56,
-          borderColor: "#111",
-          borderWidth: rows.map((_, i) => i === selected ? 1.5 : 0) })) },
-      options: {
-        animation: state.animated ? false : { duration: 500 },
-        plugins: { legend: { display: false }, tooltip: {
-          callbacks: { label: (c) => `${c.dataset.label}: ${fmtTok(c.raw)}` } } },
-        onClick: (e, els) => { if (els.length) onClick(els[0].index); },
-        scales: {
-          x: { stacked: true, grid: { display: false },
-               ticks: { font: { family: "ui-monospace, Menlo", size: 10.5 } } },
-          y: { stacked: true, grid: { color: "#F2F1EE" }, border: { display: false },
-               ticks: { callback: (v) => fmtTok(v),
-                        font: { family: "ui-monospace, Menlo", size: 10.5 } } },
+    wrap.innerHTML = PANELS.map(([title], pi) => `
+      <div class="kicker" style="padding:${pi ? "12px" : "0"} 0 2px">${title}
+      </div><div style="position:relative;height:104px;width:100%">
+      <canvas></canvas></div>`).join("");
+    const canvases = wrap.querySelectorAll("canvas");
+    PANELS.forEach(([, keys], pi) => {
+      charts.push(new Chart(canvases[pi], {
+        type: "bar",
+        data: { labels,
+          datasets: keys.map((k) => ({
+            label: COMP[k].label, data: rows.map((r) => r[k]),
+            backgroundColor: css(COMP[k].v), stack: "t", borderRadius: 2,
+            maxBarThickness: 56, borderColor: "#111",
+            borderWidth: rows.map((_, i) => i === selected ? 1.5 : 0),
+            hidden: state.hidden.has(k) })) },
+        options: {
+          maintainAspectRatio: false,
+          animation: state.animated ? false : { duration: 500 },
+          plugins: { legend: { display: false }, tooltip: {
+            callbacks: { label: (c) =>
+              `${c.dataset.label}: ${fmtTok(c.raw)}` } } },
+          onClick: (e, els) => { if (els.length) onClick(els[0].index); },
+          scales: {
+            x: { stacked: true, grid: { display: false },
+                 ticks: { display: pi === PANELS.length - 1,
+                          font: { family: "ui-monospace, Menlo",
+                                  size: 10.5 } } },
+            y: { stacked: true, grid: { color: "#F2F1EE" },
+                 border: { display: false },
+                 ticks: { callback: (v) => fmtTok(v), maxTicksLimit: 4,
+                          font: { family: "ui-monospace, Menlo",
+                                  size: 10.5 } } },
+          },
         },
-      },
+      }));
     });
+    legend.querySelectorAll("[data-comp]").forEach((sp) =>
+      sp.addEventListener("click", () => {
+        const k = sp.dataset.comp;
+        state.hidden.has(k) ? state.hidden.delete(k) : state.hidden.add(k);
+        const pi = PANELS.findIndex(([, keys]) => keys.includes(k));
+        const di = PANELS[pi][1].indexOf(k);
+        charts[pi].setDatasetVisibility(di, !state.hidden.has(k));
+        charts[pi].update();
+        sp.style.opacity = state.hidden.has(k) ? ".35" : "1";
+      }));
+    bindTips(legend);
     state.animated = true;  // one-time render animation only
   }
 
@@ -345,6 +497,7 @@
       border-radius:2px;background:var(--ink);opacity:${dim ? ".45" : ".85"};
       width:${Math.max(v / mx * 120, 2)}px;margin-right:8px;vertical-align:1px">
       </span>`;
+    let shown;
     el.querySelector("#cLeague").innerHTML = `
       <table style="width:100%;border-collapse:collapse">
       <thead><tr>
@@ -371,12 +524,13 @@
           tokens</span>${sortMark("message_tokens")}</span></th>
         <th style="text-align:right;font-family:var(--mono);font-size:10.5px;
           letter-spacing:.06em;text-transform:uppercase;color:var(--muted);
-          font-weight:500;border-bottom:1px solid var(--border)">14d</th>
+          font-weight:500;border-bottom:1px solid var(--border)">
+          14d invocations</th>
         <th style="border-bottom:1px solid var(--border)"></th></tr></thead>
-      <tbody>${rows.slice(0, 30)
+      <tbody>${(shown = rows.slice(0, 30)
         // pinned: every demoted item stays restorable past the row cut
-        .concat(rows.slice(30).filter((r) => state.demoted.has(r.consumer)))
-        .map((r) => {
+        .concat(rows.slice(30).filter((r) => state.demoted.has(r.consumer))))
+        .map((r, ri) => {
         const demoted = r.type === "shell" && state.demoted.has(r.consumer);
         const ov = r.type === "cli"
           ? ` data-ov="1" data-consumer="${r.consumer}" data-tip="Click to move
@@ -402,11 +556,20 @@
         <td class="num" style="text-align:right;font-size:12px;white-space:nowrap;
           border-bottom:1px solid #F2F1EE">${bar(r.message_tokens, maxB, 1)}
           ${fmtTok(r.message_tokens)}</td>
-        <td style="text-align:right;border-bottom:1px solid #F2F1EE">
+        <td class="cSpark" data-i="${ri}" data-tip="Click to enlarge with
+          dated axes" style="text-align:right;cursor:pointer;
+          border-bottom:1px solid #F2F1EE">
           ${sparkSVG(r.spark)}</td>
         <td style="text-align:right;border-bottom:1px solid #F2F1EE">
           ${flag(r.flag)}</td>
       </tr>`; }).join("")}</tbody></table>`;
+    el.querySelectorAll("td.cSpark").forEach((c) =>
+      c.addEventListener("click", () => {
+        const [, to] = presetRange(state.preset);
+        const r = shown[+c.dataset.i];
+        window.ccw.sparkZoomRow(c.parentElement,
+          {counts: r.spark, tokens: r.spark_tok}, to, 7);
+      }));
     el.querySelectorAll("[data-sort]").forEach((h) =>
       h.addEventListener("click", () => {
         state.sortKey = h.dataset.sort;

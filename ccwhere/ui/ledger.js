@@ -97,7 +97,12 @@
           border-bottom:1px solid #F7F6F3">${s.tokens} tok</td>
         <td class="num" style="font-size:11.5px;text-align:right;width:50px;
           border-bottom:1px solid #F7F6F3">${s.usage ? s.usage.uses : 0}</td>
-        <td style="text-align:right;width:80px;
+        <td class="skSpark" data-tip="Click to enlarge with dated axes"
+          data-spark="${((s.usage && s.usage.spark) || Array(14).fill(0))
+            .join(",")}"
+          data-sparktok="${((s.usage && s.usage.spark_tok) ||
+            Array(14).fill(0)).join(",")}"
+          style="text-align:right;width:80px;cursor:pointer;
           border-bottom:1px solid #F7F6F3">${sparkSVG(
             (s.usage && s.usage.spark) || Array(14).fill(0))}</td>
         <td class="num" style="font-size:11px;text-align:right;width:110px;
@@ -229,6 +234,13 @@
         </div>
       </div>`;
     }).join("");
+    el.querySelectorAll("td.skSpark").forEach((c) =>
+      c.addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        window.ccw.sparkZoomRow(c.parentElement,
+          {counts: c.dataset.spark.split(",").map(Number),
+           tokens: c.dataset.sparktok.split(",").map(Number)}, null, 7);
+      }));
     el.querySelectorAll("tr.drillable").forEach((r) =>
       r.addEventListener("click", (ev) => {
         ev.stopPropagation();

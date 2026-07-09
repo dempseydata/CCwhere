@@ -10,7 +10,7 @@ None. No API keys, no tokens, no credentials of any kind exist in this system �
 | --- | --- | --- | --- |
 | `--port` | CLI flag | 8917 | loopback-only regardless of value; conflict fails fast at startup |
 | `--no-browser` | CLI flag | off | convenience only |
-| `~/.ccwhere/overrides.json` | operator file, UI-managed | absent | curation only (demoted cli consumers); corrupt/missing → empty set, never an error |
+| `~/.ccwhere/overrides.json` | operator file, UI-managed (demotions) / hand-edited (prices) | absent | `demoted`: cli consumers moved out of the default league; `prices`: per-MTok list prices for models ccwhere does not know (`{"claude-x": {"in":..,"out":..,"cr":..,"cw":..}}`) — UI writes preserve hand-added keys; corrupt/missing → empty, never an error |
 
 ## Fixed constants (code, not config — change = code review)
 

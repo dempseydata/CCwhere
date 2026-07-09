@@ -83,6 +83,16 @@ class TestQueries(unittest.TestCase):
         self.assertEqual(rows["X"]["message_tokens"], 400)   # 100 + 300, exact
         self.assertEqual(rows["c0"]["message_tokens"], 500)
 
+    def test_spark_token_series(self):
+        rows = {r["consumer"]: r for r in queries.league(self.conn, self.f)}
+        # X invoked on the 100-tok message (s1) and the 300-tok message (s2),
+        # both on day1: the token spark must carry exactly those tokens
+        self.assertEqual(sum(rows["X"]["spark_tok"]), 400)
+        self.assertEqual(len(rows["X"]["spark_tok"]), 14)
+        self.assertEqual(sum(rows["W"]["spark_tok"]), 1000)  # cache-heavy msg
+        usage = queries.skill_usage(self.conn)
+        self.assertEqual(sum(usage["X"]["spark_tok"]), 400)
+
     def test_flags(self):
         rows = {r["consumer"]: r for r in queries.league(self.conn, self.f)}
         self.assertEqual(rows["X"]["flag"], "disagree")  # top-5 A, rank 11+ B
@@ -180,6 +190,58 @@ class TestQueries(unittest.TestCase):
         self.assertNotIn("write-prd", rows)
         # skill row from base fixture has no durations: no fabricated numbers
         self.assertIsNone(rows["X"]["p50"])
+
+    def test_fresh_counting_mode(self):
+        s = queries.strip(self.conn, self.f)
+        # fresh = input + output only
+        self.assertEqual(s["fresh"], s["tokens"] - 700 - 200)  # minus W's cache
+        rows = {r["consumer"]: r for r in queries.league(
+            self.conn, dict(self.f, fresh=True))}
+        self.assertEqual(rows["W"]["message_tokens"], 100)   # not 1000
+        self.assertEqual(rows["X"]["message_tokens"], 400)   # output-only: same
+        all_rows = {r["consumer"]: r for r in queries.league(self.conn, self.f)}
+        self.assertEqual(all_rows["W"]["message_tokens"], 1000)
+
+    def test_models_and_pricing(self):
+        c = self.conn
+        # a priced model alongside the fixture's unpriced "m"
+        c.execute("INSERT INTO messages VALUES (?,?,?,?,?,?,?,?,?,?)",
+                  ("s1", 40, "s1-40", L(2026, 7, 1, 15), "assistant",
+                   "claude-sonnet-5", 1_000_000, 1_000_000, 1_000_000,
+                   1_000_000))
+        c.commit()
+        rows = queries.models(self.conn, self.f)
+        by = {r["model"]: r for r in rows}
+        self.assertEqual(by["claude-sonnet-5"]["input"], 1_000_000)
+        self.assertGreater(by["m"]["output"], 0)
+        cost = queries.priced(rows)
+        # 1 MTok each at sonnet list: 3 + 15 + 0.30 + 3.75
+        self.assertEqual(by["claude-sonnet-5"]["usd"], 22.05)
+        self.assertIsNone(by["m"]["usd"])  # unpriced: never guessed
+        self.assertEqual(cost["usd"], 22.05)
+        self.assertLess(cost["coverage_pct"], 100)  # honesty: partial
+        # operator-supplied price picks up the unknown model
+        cost2 = queries.priced(queries.models(self.conn, self.f),
+                               {"m": {"in": 1, "out": 1, "cr": 1, "cw": 1}})
+        self.assertEqual(cost2["coverage_pct"], 100.0)
+
+    def test_models_scope_to_day_and_hour(self):
+        rows = queries.models(self.conn, self.f, date="2026-07-01", hour=11)
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["output"], 100)  # only the 11:00 message
+        day2 = queries.models(self.conn, self.f, date="2026-07-02")
+        self.assertEqual(sum(r["output"] for r in day2), 200)
+
+    def test_overrides_file_preserves_prices(self):
+        import json as _json
+        from ccwhere import db as _db
+        path = Path(self.tmp.name) / "o.db"
+        (Path(self.tmp.name) / "overrides.json").write_text(_json.dumps(
+            {"prices": {"claude-fable": {"in": 1, "out": 2,
+                                         "cr": 0.1, "cw": 1.2}}}))
+        _db.save_overrides({"npm"}, db_path=path)
+        self.assertEqual(_db.load_overrides(db_path=path), {"npm"})
+        self.assertIn("claude-fable", _db.load_prices(db_path=path))
 
     def test_ledger_medians_parent_only_and_floor(self):
         c = self.conn

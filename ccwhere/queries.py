@@ -5,6 +5,13 @@ from datetime import date as _date, datetime, timedelta
 
 TOK = ("COALESCE(m.input_tokens,0)+COALESCE(m.output_tokens,0)"
        "+COALESCE(m.cache_read_tokens,0)+COALESCE(m.cache_create_tokens,0)")
+FRESH_TOK = "COALESCE(m.input_tokens,0)+COALESCE(m.output_tokens,0)"
+
+
+def _tok(f):
+    """Counting mode: full message context, or fresh work only (provisional
+    league toggle, operator evaluating 2026-07-09)."""
+    return FRESH_TOK if f.get("fresh") else TOK
 LOCAL_DAY = "date(datetime({c},'localtime'))"
 LOCAL_HOUR = "CAST(strftime('%H', datetime({c},'localtime')) AS INT)"
 
@@ -45,7 +52,7 @@ def _filters(f, ts_col):
 
 def _session_totals(f):
     w, a = _filters(f, "m.ts")
-    return (f"SELECT m.session_id sid, SUM({TOK}) total FROM messages m "
+    return (f"SELECT m.session_id sid, SUM({_tok(f)}) total FROM messages m "
             f"JOIN sessions s ON s.session_id=m.session_id WHERE {w} "
             f"GROUP BY m.session_id"), a
 
@@ -69,17 +76,19 @@ def league(conn, f):
         st_args + ea + at).fetchall()
     # Message lens: only the exact messages that invoked the consumer
     lens_b = dict(conn.execute(
-        f"SELECT d.consumer, SUM({TOK}) FROM "
+        f"SELECT d.consumer, SUM({_tok(f)}) FROM "
         f"(SELECT DISTINCT tc.consumer, tc.session_id sid, tc.line_no ln "
         f" FROM tool_calls tc JOIN sessions s ON s.session_id=tc.session_id "
         f" WHERE {wt}) d "
         f"JOIN messages m ON m.session_id=d.sid AND m.line_no=d.ln "
         f"GROUP BY d.consumer", at).fetchall())
     spark = _spark(conn, f)
+    spark_tok = _spark_tokens(conn, f)
 
     rows = [{"consumer": c, "type": t, "sessions": n,
              "session_tokens": v or 0, "message_tokens": lens_b.get(c, 0) or 0,
-             "spark": spark.get(c, [0] * 14)}
+             "spark": spark.get(c, [0] * 14),
+             "spark_tok": spark_tok.get(c, [0] * 14)}
             for c, t, n, v in lens_a]
     rows.sort(key=lambda r: -r["session_tokens"])
     rank_a = {r["consumer"]: i + 1 for i, r in enumerate(rows)}
@@ -99,12 +108,16 @@ def league(conn, f):
     return rows
 
 
-def _spark(conn, f):
-    """Daily invocation counts per consumer, last 14 local days ending 'to'."""
+def _spark_days(f):
     end = datetime.strptime(f["to"], "%Y-%m-%d").date() if f.get("to") \
         else _date.today()
     days = [(end - timedelta(days=13 - i)).isoformat() for i in range(14)]
-    idx = {d: i for i, d in enumerate(days)}
+    return days, {d: i for i, d in enumerate(days)}
+
+
+def _spark(conn, f):
+    """Daily invocation counts per consumer, last 14 local days ending 'to'."""
+    days, idx = _spark_days(f)
     w, a = _filters(dict(f, **{"from": days[0], "to": days[-1]}), "tc.ts")
     out = {}
     for c, d, n in conn.execute(
@@ -114,6 +127,26 @@ def _spark(conn, f):
         out.setdefault(c, [0] * 14)
         if d in idx:
             out[c][idx[d]] = n
+    return out
+
+
+def _spark_tokens(conn, f):
+    """Token twin of _spark: per consumer per local day, the Message-lens
+    tokens of the exact invoking messages (DISTINCT consumer/session/line)."""
+    days, idx = _spark_days(f)
+    w, a = _filters(dict(f, **{"from": days[0], "to": days[-1]}), "tc.ts")
+    out = {}
+    for c, d, v in conn.execute(
+            f"SELECT dd.consumer, dd.day, SUM({TOK}) FROM "
+            f"(SELECT DISTINCT tc.consumer, tc.session_id sid, tc.line_no ln,"
+            f" {LOCAL_DAY.format(c='tc.ts')} day"
+            f" FROM tool_calls tc JOIN sessions s ON s.session_id=tc.session_id"
+            f" WHERE {w}) dd "
+            f"JOIN messages m ON m.session_id=dd.sid AND m.line_no=dd.ln "
+            f"GROUP BY dd.consumer, dd.day", a).fetchall():
+        out.setdefault(c, [0] * 14)
+        if d in idx:
+            out[c][idx[d]] = v or 0
     return out
 
 
@@ -128,16 +161,23 @@ def _totals(conn, f):
             "cache_create": r[3], "sessions": r[4]}
 
 
+def prev_window(f):
+    """The immediately preceding window of equal length, or None."""
+    if not (f.get("from") and f.get("to")):
+        return None
+    d0 = datetime.strptime(f["from"], "%Y-%m-%d").date()
+    d1 = datetime.strptime(f["to"], "%Y-%m-%d").date()
+    span = (d1 - d0).days + 1
+    return dict(f, **{"from": (d0 - timedelta(days=span)).isoformat(),
+                      "to": (d0 - timedelta(days=1)).isoformat()})
+
+
 def strip(conn, f):
     cur = _totals(conn, f)
     tokens = sum(cur[k] for k in ("input", "output", "cache_read", "cache_create"))
     prev = {"tokens": None, "sessions": None}
-    if f.get("from") and f.get("to"):
-        d0 = datetime.strptime(f["from"], "%Y-%m-%d").date()
-        d1 = datetime.strptime(f["to"], "%Y-%m-%d").date()
-        span = (d1 - d0).days + 1
-        pf = dict(f, **{"from": (d0 - timedelta(days=span)).isoformat(),
-                        "to": (d0 - timedelta(days=1)).isoformat()})
+    pf = prev_window(f)
+    if pf:
         p = _totals(conn, pf)
         prev = {"tokens": sum(p[k] for k in
                               ("input", "output", "cache_read", "cache_create")),
@@ -150,8 +190,68 @@ def strip(conn, f):
         top = {"consumer": rows[0]["consumer"], "type": rows[0]["type"],
                "agree": rows[0]["flag"] == "agree"}
     return {"tokens": tokens, "tokens_prev": prev["tokens"],
+            "fresh": cur["input"] + cur["output"],
             "sessions": cur["sessions"], "sessions_prev": prev["sessions"],
             "cache_rate_pct": rate, "top": top}
+
+
+# USD per MTok, public list prices, prefix-matched on the model id.
+# ponytail: models with no public list price (e.g. fable/mythos tiers) get
+# NO entry — cost never guesses; operators may add entries via
+# ~/.ccwhere/overrides.json {"prices": {"claude-fable": {"in":..,"out":..,
+# "cr":..,"cw":..}}}
+PRICES = {
+    "claude-sonnet": {"in": 3.0, "out": 15.0, "cr": 0.30, "cw": 3.75},
+    "claude-opus": {"in": 15.0, "out": 75.0, "cr": 1.50, "cw": 18.75},
+    "claude-haiku": {"in": 1.0, "out": 5.0, "cr": 0.10, "cw": 1.25},
+}
+
+
+def models(conn, f, date=None, hour=None):
+    """Per-model component sums over the active filters, busiest first.
+    date/hour narrow to one local day or hour (the chart drill's scope)."""
+    if date:
+        f = dict(f, **{"from": date, "to": date})
+    w, a = _filters(f, "m.ts")
+    if hour is not None:
+        w += f" AND {LOCAL_HOUR.format(c='m.ts')} = ?"
+        a = a + [hour]
+    return [{"model": r[0], "messages": r[1], "input": r[2], "output": r[3],
+             "cache_read": r[4], "cache_create": r[5]}
+            for r in conn.execute(
+                f"SELECT COALESCE(m.model, '(unknown)'), COUNT(*),"
+                f" COALESCE(SUM(m.input_tokens),0),"
+                f" COALESCE(SUM(m.output_tokens),0),"
+                f" COALESCE(SUM(m.cache_read_tokens),0),"
+                f" COALESCE(SUM(m.cache_create_tokens),0)"
+                f" FROM messages m JOIN sessions s ON s.session_id=m.session_id"
+                f" WHERE {w} GROUP BY 1 ORDER BY 5 DESC", a).fetchall()]
+
+
+def priced(model_rows, extra_prices=None):
+    """Attach ≈USD list cost per model row (mutates rows: 'usd'). Models
+    without a known price get usd None and are excluded from the total —
+    coverage says how much of the token volume the total actually prices."""
+    prices = {**PRICES, **(extra_prices or {})}
+    usd = priced_tok = all_tok = 0.0
+    for r in model_rows:
+        tok = r["input"] + r["output"] + r["cache_read"] + r["cache_create"]
+        all_tok += tok
+        p = next((v for k, v in prices.items()
+                  if r["model"].startswith(k)), None)
+        try:
+            r["usd"] = round((r["input"] * p["in"] + r["output"] * p["out"]
+                              + r["cache_read"] * p["cr"]
+                              + r["cache_create"] * p["cw"]) / 1e6, 2) \
+                if p else None
+        except (KeyError, TypeError):  # malformed operator-supplied entry
+            r["usd"] = None
+        if r["usd"] is not None:
+            usd += r["usd"]
+            priced_tok += tok
+    return {"usd": round(usd, 2),
+            "coverage_pct": round(priced_tok / all_tok * 100, 1)
+            if all_tok else None}
 
 
 def daily(conn, f):
@@ -292,9 +392,12 @@ def skill_usage(conn):
         " MAX(date(datetime(ts,'localtime'))) "
         "FROM tool_calls WHERE consumer_type IN ('skill','command') "
         "GROUP BY consumer").fetchall()
-    spark = _spark(conn, {"types": ["skill", "command"]})
+    f = {"types": ["skill", "command"]}
+    spark = _spark(conn, f)
+    spark_tok = _spark_tokens(conn, f)
     return {c: {"uses": n, "first": first, "last": last,
-                "spark": spark.get(c, [0] * 14)}
+                "spark": spark.get(c, [0] * 14),
+                "spark_tok": spark_tok.get(c, [0] * 14)}
             for c, n, first, last in rows}
 
 
@@ -304,7 +407,8 @@ def match_skill_usage(usage, names, pkg):
     (frontmatter name, directory name); prefix must agree when present."""
     names = {n for n in (names if isinstance(names, (set, list, tuple))
                          else [names]) if n}
-    total = {"uses": 0, "first": None, "last": None, "spark": [0] * 14}
+    total = {"uses": 0, "first": None, "last": None,
+             "spark": [0] * 14, "spark_tok": [0] * 14}
     for key, u in usage.items():
         prefix, _, base = key.rpartition(":")
         if base not in names or (prefix and pkg and prefix != pkg):
@@ -314,6 +418,9 @@ def match_skill_usage(usage, names, pkg):
                              default=None)
         total["last"] = max(total["last"] or "", u["last"] or "") or None
         total["spark"] = [a + b for a, b in zip(total["spark"], u["spark"])]
+        total["spark_tok"] = [a + b for a, b in
+                              zip(total["spark_tok"], u.get("spark_tok",
+                                                            [0] * 14))]
     return total
 
 

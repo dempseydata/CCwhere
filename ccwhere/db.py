@@ -77,19 +77,31 @@ def _overrides_path(db_path=None):
         / "overrides.json"
 
 
-def load_overrides(db_path=None) -> set:
-    """Operator-demoted cli consumers. Missing/corrupt file → empty set."""
+def _read_overrides(db_path=None) -> dict:
     try:
         data = json.loads(_overrides_path(db_path).read_text())
-        return {str(c) for c in data.get("demoted", [])}
+        return data if isinstance(data, dict) else {}
     except (OSError, ValueError):
-        return set()
+        return {}
+
+
+def load_overrides(db_path=None) -> set:
+    """Operator-demoted cli consumers. Missing/corrupt file → empty set."""
+    return {str(c) for c in _read_overrides(db_path).get("demoted", [])}
+
+
+def load_prices(db_path=None) -> dict:
+    """Operator-supplied model prices (for models with no public list price)."""
+    p = _read_overrides(db_path).get("prices", {})
+    return p if isinstance(p, dict) else {}
 
 
 def save_overrides(demoted, db_path=None):
     p = _overrides_path(db_path)
     p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(json.dumps({"demoted": sorted(demoted)}, indent=1))
+    data = _read_overrides(db_path)  # preserve hand-added keys (prices…)
+    data["demoted"] = sorted(demoted)
+    p.write_text(json.dumps(data, indent=1))
 
 
 def connect(db_path=None) -> sqlite3.Connection:
