@@ -73,9 +73,17 @@ The CLI-vs-shell line is drawn by **where the binary lives** (OS directories = s
 
 **So the final word is yours.** Click the `cli` tag on any row in the league table to demote that program to the shell-utilities bucket — it leaves the default ranking immediately. Demoted rows stay visible under the shell-utilities toggle with a distinct `shell ·you` tag; click it to restore. Your choices live in `~/.ccwhere/overrides.json` (human-readable), apply at query time only — the stored data keeps the provenance truth — and survive cache rebuilds. Demotion applies only to CLI programs: skills and MCP servers are always actionable, and the other two types are already out of the default view.
 
+## Repository layout & how this was built
+
+ccwhere is developed spec-first with [OpenSpec](https://github.com/Fission-AI/OpenSpec): every feature started as a written change proposal with delta specifications, and on completion those deltas were merged into the living requirements. Two folders come out of that process:
+
+- **`openspec/specs/`** — the current, binding requirements for each capability (event store, ingest, the four tabs, the HTTP server). This is where the honest-numbers rules live as testable requirements with scenarios — e.g. the ban on averaging the two lenses, the rule that orphaned tool calls never receive invented durations, and the Live view's no-interaction constraint. If you propose a change, this is the contract it must satisfy or explicitly amend. You don't need the OpenSpec tool to read them — they're plain Markdown.
+- **`documentation/`** — conventional system documentation: architecture and trust boundaries, permission-relevant flows, the (deliberately absent) auth model, and the configuration surface. Written for human reviewers and AI coding agents alike.
+
+The proposal-by-proposal build history is not part of this repository.
+
 ## Notes
 
-- Specifications for every capability live in `openspec/specs/` — the honest-numbers rules above are requirements there, not aspirations. System documentation (architecture, flows, permissions posture, configuration) lives in `documentation/`.
 - Built and dogfooded by one operator; expect rough edges. Issues welcome.
 
 ## License
