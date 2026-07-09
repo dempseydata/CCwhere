@@ -102,18 +102,13 @@ class Handler(BaseHTTPRequestHandler):
                                                -s["tokens"]))
                 return items
 
-            floor = led["floor"]
-            projects = []
-            for p in led["projects"]:
-                items = attach_usage(scan.project_items(p["cwd"], p["project"]))
-                itemized = sum(i["tokens"] or 0 for i in items)
-                projects.append({**p, "items": items, "itemized": itemized,
-                                 "floor": min(floor, p["median"]),
-                                 "unattributed": max(
-                                     p["median"] - floor - itemized, 0)})
-            return self._json({"floor": floor,
-                               "floor_items": attach_usage(scan.floor_items()),
-                               "projects": projects})
+            tree = scan.context_tree(led["projects"])
+            for node in tree:
+                attach_usage(node["items"])
+                if node["median"] is not None:
+                    node["unattributed"] = max(
+                        node["median"] - node["accumulated"], 0)
+            return self._json({"floor": led["floor"], "tree": tree})
         if path == "/api/live":
             return self._json({"sessions": live.live_sessions(
                 projects_root=self.server.projects_root),

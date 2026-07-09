@@ -20,6 +20,7 @@ None. No API keys, no tokens, no credentials of any kind exist in this system â€
 | `CANARY_THRESHOLD_PCT` (`server.py`) | 1.0 | drift share above which the canary fires |
 | `PAIR_CAP_MS` (`ingest.py`) | 10 min | tool-call pairing cap; beyond it a call is an orphan (NULL duration) |
 | `LIVE_WINDOW_S` / `RECENT_WINDOW_S` (`live.py`) | 5 / 15 min | liveness bands |
+| `EAGER_STUB_TOK` (`scan.py`) | 25 | probe-calibrated eager cost per skill/command/plugin entry (measured range 13â€“46, 2026-07-09/10) |
 | `TAIL_BYTES` (`live.py`) | 64 KB | bounded tail read for live activity |
 
 These are constants, not knobs, on purpose: each encodes an operator decision recorded in `openspec/specs/`, and a config file for values nobody varies would be surface without benefit.

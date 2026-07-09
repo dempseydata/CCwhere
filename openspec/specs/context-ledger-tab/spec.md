@@ -12,19 +12,23 @@ The ledger SHALL compute, per project, the median first-call context of its pare
 - **WHEN** a project has 10 parent sessions and 200 subagent sessions
 - **THEN** its median is computed over the 10 parent sessions
 
-### Requirement: Calibrated floor and honest decomposition
-The ledger SHALL derive the calibrated floor (minimum median across projects) and decompose each project's median as floor + itemized + unattributed, where unattributed = median − floor − itemized (clamped at zero) and is always displayed at full size. The shared floor SHALL show its own best-effort decomposition of everything loaded at user level regardless of project: `~/.claude/CLAUDE.md`, user-scoped `~/.claude/skills` and `~/.claude/commands` descriptions, active plugin skill and command descriptions (from `installed_plugins.json`, active versions only — raw cache scans double-count) as `prunable`, and the harness base as `fixed cost` with no fabricated number.
+### Requirement: Eager stubs, not descriptions
+Skill, command, and plugin entries SHALL be costed eagerly at a calibrated per-entry stub (25 tok; probe-measured 2026-07-09/10 — a planted 2,170-token description raised first-call context by 46 tokens; 13–46/entry at scale), never at description size. Description sizes SHALL be shown as the secondary "descriptions (on use)" number, full SKILL.md/command body sizes as "bodies (when invoked)" — the three-tier cost truth (stub → description → body) — and descriptions remain the basis of the pruning drill, which also shows each entry's body size. Instruction files (CLAUDE.md, AGENTS.md, .mcp.json, project memory) count eagerly at full size.
 
-#### Scenario: Unattributed never hidden
-- **WHEN** a project's itemized files explain 65% of its median
-- **THEN** the remaining share renders as an explicit unattributed segment with named suspects (session hooks, MCP instructions, harness lists)
+#### Scenario: A huge description is not an eager tax
+- **WHEN** an installed skill carries a 2,000-token description
+- **THEN** its eager itemization is the calibrated stub, with the description size shown as catalog-on-use
 
-### Requirement: Static itemization from the project's real path
-Using the session-recorded cwd, the ledger SHALL itemize on-disk standing costs per project: root CLAUDE.md, AGENTS.md, project `.claude/skills` descriptions, project memory, `.mcp.json` — each with an estimated token size (size/4), a plain-language note, and a `prunable` tag. Scanning is read-only; a missing or inaccessible path yields an empty itemization, never an error. Pruning tags SHALL attach only to itemized entries.
+### Requirement: Context tree with additional and accumulated
+The ledger SHALL render a folder tree from the user scope down each observed session path (content-less intermediate folders skipped): per node, "additional" eager tokens introduced at that level and "accumulated" — the parent's accumulated plus additional, along one branch. Nodes with sessions SHALL show the measured median and the unattributed share (median − accumulated, clamped at zero) beside the estimate, with low-sample badges under N=3. Each node SHALL expand to its items (instruction files, stubs with catalogs, project-enabled plugins) and onward into the per-skill usage drill. The UI SHALL state the single-branch assumption — visiting a sibling folder mid-session loads its content on use, not modeled — and the stub calibration with its measured range.
 
-#### Scenario: Itemization matches the hand-measured method
-- **WHEN** the ledger scans a project carrying a root CLAUDE.md and AGENTS.md
-- **THEN** each appears as a separate prunable entry with a size/4 token estimate consistent with hand measurement
+#### Scenario: Accumulation follows the branch
+- **WHEN** a project folder adds 1,000 tokens of instruction files below a user level of 200
+- **THEN** its accumulated shows 1,200, and a subfolder with 500 more shows 1,700
+
+#### Scenario: Probe self-validation
+- **WHEN** a session ran in a bare folder containing one skill
+- **THEN** its node shows additional = one stub and its measured median sits beside it, the difference appearing as unattributed
 
 ### Requirement: Aggregate skill entries drill to usage evidence
 Aggregate itemized entries ("plugin skill descriptions (N)", ".claude/skills (N)") SHALL expand to per-skill rows, each carrying: skill name (with package), description-token cost, total uses, a 14-day usage sparkline, first-used and last-used dates, and a status tag (`never used` / `stale >30d` / `active`) — usage matched from the union of Skill-tool invocations and typed command invocations (`<command-name>` rows) in the store, since skill-backed commands are invoked both ways. Clicking a drill row's sparkline SHALL toggle an inserted full-width row beneath it with an enlarged version — dated x axis, readable y axis — offering the same invocations/tokens mode toggle as the league zoom; typed-command rows honestly show near-zero direct message tokens (user messages carry no usage block). Closed by a second click. Rows SHALL be grouped by package (so a skill maps to its source), each group headed by a visually distinct band (the package must be identifiable at a glance while scrolling) carrying its subtotal (skill count, standing cost, never-used cost); groups SHALL be ordered by never-used cost descending — the most wasteful package first — and rows within a group as a prune-priority list: never-used first (largest cost first), then by ascending use. The user-level section SHALL surface the total never-used cost as a headline number. A `prunable` tag without usage evidence is guidance-free and SHALL NOT be the drill floor for skill aggregates.
@@ -40,10 +44,3 @@ Aggregate itemized entries ("plugin skill descriptions (N)", ".claude/skills (N)
 #### Scenario: Drill sparkline enlarges in place
 - **WHEN** the operator clicks a drill row's sparkline
 - **THEN** a full-width row opens beneath it with the enlarged dated chart; a second click closes it
-
-### Requirement: Ledger UI per the design contract
-The tab SHALL render the user-level inventory once, above the project list — this payload applies to every session on the machine and SHALL NOT be repeated inside each project's expansion. Per-project rows follow — honest label from cwd, median as the big number, composition bar (floor gray / itemized ink / unattributed hatch) — each expanding to a two-group inventory (this project's files, unattributed), per `design/mockups/context-ledger-tab.html`. Composition bars share one scale (the maximum median) so projects compare by eye.
-
-#### Scenario: Expand to inventory
-- **WHEN** the operator clicks a project row
-- **THEN** the two-group inventory (project files, unattributed) opens beneath it with per-item bars, notes, and tags; clicking again closes it — the user-level section stays at the top, rendered once

@@ -141,14 +141,18 @@ class TestServer(unittest.TestCase):
     def test_ledger_payload(self):
         status, led = self.get_json("/api/ledger")
         self.assertEqual(status, 200)
-        self.assertGreaterEqual(len(led["projects"]), 1)
-        p = led["projects"][0]
-        for key in ("median", "n", "items", "itemized", "unattributed"):
-            self.assertIn(key, p)
-        self.assertEqual(led["floor_items"][-1]["tag"], "fixed")
-        # decomposition sums to the median (unattributed clamps the remainder)
-        self.assertLessEqual(p["floor"] + p["itemized"], p["median"] +
-                             p["itemized"])  # sanity: no negative parts
+        tree = led["tree"]
+        self.assertEqual(tree[0]["label"], "user level (~/.claude)")
+        self.assertEqual(tree[0]["items"][-1]["tag"], "fixed")  # harness line
+        # accumulated grows monotonically down each branch
+        for nd in tree[1:]:
+            self.assertGreaterEqual(nd["accumulated"], nd["additional"])
+            for key in ("label", "depth", "items"):
+                self.assertIn(key, nd)
+        # session nodes carry median + clamped unattributed
+        withmed = [nd for nd in tree if nd.get("median") is not None]
+        self.assertGreaterEqual(len(withmed), 1)
+        self.assertGreaterEqual(withmed[0]["unattributed"], 0)
 
     def test_overrides_demote_roundtrip(self):
         def post(body):

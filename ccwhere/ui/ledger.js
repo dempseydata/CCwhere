@@ -2,14 +2,7 @@
 "use strict";
 
 (function () {
-  const HATCH = "repeating-linear-gradient(45deg,#DDDBD6 0 3px,#F4F2ED 3px 6px)";
-
   const fmtK = (n) => n == null ? "—" : (n / 1000).toFixed(1) + "K";
-  const label = (p) => {
-    if (!p.cwd) return p.project.replace(/^-?Users-[^-]+-(Documents-)?/, "");
-    const parts = p.cwd.split("/").filter(Boolean);
-    return parts.slice(-2).join("/");
-  };
 
   let tip = document.getElementById("tip");
   function bindTips(root) {
@@ -75,7 +68,7 @@
         package, most never-used cost first</div>
       <table style="width:100%;border-collapse:collapse">` +
       ordered.map(([pkg, list]) => `<tr>
-        <td colspan="7" style="padding:14px 0 6px">
+        <td colspan="8" style="padding:14px 0 6px">
           <div style="background:#EDEBE6;border-radius:4px;padding:5px 10px;
             font-family:var(--mono);font-size:11.5px;font-weight:700;
             letter-spacing:.07em;text-transform:uppercase">
@@ -95,6 +88,10 @@
             Math.max(s.tokens / maxT * 110, 2).toFixed(0)}px"></div></td>
         <td class="num" style="font-size:11.5px;text-align:right;width:60px;
           border-bottom:1px solid #F7F6F3">${s.tokens} tok</td>
+        <td class="num" data-tip="Full SKILL.md body — loads when the skill
+          is invoked" style="font-size:11.5px;text-align:right;width:70px;
+          color:var(--sec);border-bottom:1px solid #F7F6F3">${
+            s.file_tok ? fmtK(s.file_tok) : "—"} body</td>
         <td class="num" style="font-size:11.5px;text-align:right;width:50px;
           border-bottom:1px solid #F7F6F3">${s.usage ? s.usage.uses : 0}</td>
         <td class="skSpark" data-tip="Click to enlarge with dated axes"
@@ -133,7 +130,9 @@
           white-space:nowrap;border-bottom:1px solid #F7F6F3">${
             it.tokens == null ? "—" : fmtK(it.tokens)}</td>
         <td style="color:var(--sec);font-size:12px;padding-left:12px;
-          border-bottom:1px solid #F7F6F3">${it.note}${it.skills
+          border-bottom:1px solid #F7F6F3">${it.note}${it.catalog
+            ? ` · descriptions ${fmtK(it.catalog)} on use` : ""}${it.full
+            ? ` · bodies ${fmtK(it.full)} when invoked` : ""}${it.skills
             ? " · click to drill" : ""}</td>
         <td style="text-align:right;border-bottom:1px solid #F7F6F3">${
           tag(it.tag, it.tag === "prunable" ? "prunable" :
@@ -144,102 +143,83 @@
   }
 
   async function render(el) {
-    el.innerHTML = `<div class="kicker">Context ledger · medians over all
-      parent sessions</div>
+    el.innerHTML = `<div class="kicker">Context ledger · where context
+      comes from</div>
       <h1 style="margin-bottom:2px">What sessions pay before work starts</h1>
       <div style="font-size:12.5px;color:var(--sec)">The
         <span data-tip="Median of each session's first API call context (input +
         cache read + cache create). This is what actually happened — the one
         number that cannot be wrong." style="border-bottom:1px dotted
         var(--muted);cursor:help">measured median</span> is authoritative.
-        The inventory beneath it is a best-effort breakdown from files on disk —
-        the <span data-tip="The share of measured context no file on disk
-        predicts: session hook output, MCP server instructions, tool schemas,
-        harness lists. Shown at full size, never normalized away."
+        The tree shows the eager estimate per folder level:
+        <span data-tip="Skill, command, and plugin entries cost a small
+        calibrated stub eagerly (~25 tok, probes 2026-07-09: a 2,170-token
+        description added 46). Their full descriptions are a catalog that
+        loads on use — shown as the secondary number."
+        style="border-bottom:1px dotted var(--muted);cursor:help">stubs, not
+        descriptions</span> — and the
+        <span data-tip="The share of a node's measured median that neither
+        its branch's files nor stubs predict: hook output, MCP instructions,
+        git status, surface differences. Shown, never hidden."
         style="border-bottom:1px dotted var(--muted);cursor:help">unattributed
         share</span> is shown, never hidden.</div>
-      <div style="display:flex;gap:16px;font-family:var(--mono);font-size:11px;
-        color:var(--sec);margin:14px 0 4px">
-        <span><i style="display:inline-block;width:9px;height:9px;
-          border-radius:2px;background:#B8B6B0;margin-right:5px"></i>calibrated
-          floor (shared)</span>
-        <span><i style="display:inline-block;width:9px;height:9px;
-          border-radius:2px;background:#2F3437;margin-right:5px"></i>itemized
-          here (prunable)</span>
-        <span><i style="display:inline-block;width:9px;height:9px;
-          border-radius:2px;background:${HATCH};margin-right:5px"></i>
-          unattributed</span>
-      </div>
-      <div id="lFloor"></div>
-      <div id="lRows" style="color:var(--muted)">loading…</div>`;
+      <div id="lTree" style="color:var(--muted);margin-top:16px">loading…</div>
+      <div style="font-family:var(--mono);font-size:11px;color:var(--muted);
+        margin-top:14px">accumulated = the sum down one branch — visiting a
+        sibling folder mid-session loads its content on use, not modeled ·
+        stub calibration ${""}≈25 tok/entry (measured range 13–46)</div>`;
     bindTips(el);
     const led = await (await fetch("/api/ledger", {cache: "no-store"})).json();
-    const fMax = Math.max(...led.floor_items.map((i) => i.tokens || 0), 1);
-    // story 10 headline: what uninstalling all dead weight would recover
-    const unusedTot = led.floor_items.reduce((t, it) =>
-      t + (it.skills || []).reduce((a, s) =>
-        a + (s.usage && s.usage.uses ? 0 : s.tokens), 0), 0);
-    el.querySelector("#lFloor").innerHTML = `
-      <div class="kicker" style="padding:20px 0 6px">User level — loaded into
-        every session, every project · calibrated floor ${fmtK(led.floor)}
-        measured${unusedTot ? ` · <b style="color:var(--tag-yellow)">${
-        fmtK(unusedTot)} never-used</b>` : ""}</div>
-      ${invTable(led.floor_items, "background:#B8B6B0", fMax)}
-      <div class="kicker" style="padding:22px 0 2px">Per project — what each
-        working directory adds on top</div>`;
-    const maxM = Math.max(...led.projects.map((p) => p.median), 1);
-    const w = (v) => (v / maxM * 100).toFixed(1) + "%";
-    el.querySelector("#lRows").innerHTML = led.projects.map((p, i) => {
-      const maxTok = Math.max(
-        ...p.items.map((it) => it.tokens || 0), p.unattributed, 1);
-      const lowN = p.n < 3 ? ` <span style="font-family:var(--mono);
-        font-size:10px;background:var(--tag-yellow-bg);color:var(--tag-yellow);
-        border-radius:9999px;padding:2px 8px">low sample · N=${p.n}</span>` : "";
-      return `<div style="border-bottom:1px solid #F2F1EE">
-        <div class="lHead" data-i="${i}" style="display:grid;
-          grid-template-columns:22px 240px 80px 1fr;gap:16px;
-          align-items:center;padding:12px 0;cursor:pointer">
-          <span class="chev" style="font-family:var(--mono);
-            color:var(--muted);font-size:11px">▸</span>
-          <span style="font-family:var(--mono);font-size:12.5px"
-            data-tip="${p.cwd || p.project}">${label(p)}${lowN}</span>
-          <span class="num" style="font-size:14px;font-weight:600;
-            text-align:right">${fmtK(p.median)}</span>
-          <span style="position:relative;height:12px">
-            <span style="position:absolute;inset:0;display:flex;gap:2px">
-              <span data-tip="calibrated floor: ${fmtK(p.floor)} — shared by
-                every project on this machine" style="width:${w(p.floor)};
-                background:#B8B6B0;border-radius:2px"></span>
-              <span data-tip="itemized in this project: ${fmtK(p.itemized)} —
-                open the row for the inventory" style="width:${w(p.itemized)};
-                background:#2F3437;border-radius:2px"></span>
-              <span data-tip="unattributed: ${fmtK(p.unattributed)} — no file
-                on disk predicts this" style="width:${w(p.unattributed)};
-                background:${HATCH};border-radius:2px"></span>
-            </span></span>
-        </div>
-        <div class="lInv" style="display:none;padding:2px 0 18px 38px">
-          <div class="kicker" style="padding:10px 0 6px">This project's files
-            · ${fmtK(p.itemized)}</div>
-          ${p.items.length ? invTable(p.items, "background:#2F3437;opacity:.8",
-                                      maxTok)
-            : `<div style="color:var(--muted);font-size:12px">nothing
-               itemizable — no cwd recorded or no standing files found</div>`}
-          <div class="kicker" style="padding:12px 0 6px">Unattributed ·
-            ${fmtK(p.unattributed)}</div>
-          ${invTable([{name: "unattributed", tokens: p.unattributed,
-            note: "Suspects: SessionStart hook output, MCP server instructions,"
-                  + " mid-session injections", tag: "unknown"}],
-            `background:${HATCH}`, maxTok)}
-        </div>
-      </div>`;
-    }).join("");
+    const th = (txt, align) => `<th style="text-align:${align};
+      font-family:var(--mono);font-size:10.5px;letter-spacing:.06em;
+      text-transform:uppercase;color:var(--muted);font-weight:500;
+      padding:0 0 8px ${align === "right" ? "18px" : "0"};
+      border-bottom:1px solid var(--border)">${txt}</th>`;
+    el.querySelector("#lTree").innerHTML = `
+      <table style="width:100%;border-collapse:collapse"><thead><tr>
+        ${th("folder", "left")}
+        ${th("additional", "right")}
+        ${th("accumulated", "right")}
+        ${th("measured median", "right")}
+        ${th("unattributed", "right")}
+      </tr></thead>
+      <tbody>${led.tree.map((nd, i) => {
+        const lowN = nd.n != null && nd.n < 3 ? ` <span style="
+          font-family:var(--mono);font-size:10px;
+          background:var(--tag-yellow-bg);color:var(--tag-yellow);
+          border-radius:9999px;padding:1px 7px">N=${nd.n}</span>` : "";
+        return `<tr class="lNode" data-i="${i}" style="cursor:pointer">
+        <td style="font-family:var(--mono);font-size:12.5px;
+          padding:10px 12px 10px ${nd.depth * 26}px;
+          border-bottom:1px solid #F2F1EE" data-tip="${nd.path}">
+          <span class="chev" style="color:var(--muted);font-size:11px">▸</span>
+          ${nd.depth ? "└─ " : ""}${nd.label}${lowN}</td>
+        <td class="num" style="text-align:right;font-size:12.5px;
+          border-bottom:1px solid #F2F1EE">+${fmtK(nd.additional)}</td>
+        <td class="num" style="text-align:right;font-size:13px;font-weight:600;
+          border-bottom:1px solid #F2F1EE">${fmtK(nd.accumulated)}</td>
+        <td class="num" style="text-align:right;font-size:13px;
+          border-bottom:1px solid #F2F1EE">${nd.median != null
+            ? fmtK(nd.median) : `<span style="color:var(--muted)">—</span>`}</td>
+        <td class="num" style="text-align:right;font-size:12.5px;
+          color:var(--sec);border-bottom:1px solid #F2F1EE">${
+            nd.unattributed != null ? fmtK(nd.unattributed)
+            : `<span style="color:var(--muted)">—</span>`}</td>
+      </tr>
+      <tr class="lNodeItems" style="display:none"><td colspan="5"
+        style="padding:2px 0 16px ${nd.depth * 26 + 22}px">
+        ${nd.items.length
+          ? invTable(nd.items, "background:#2F3437;opacity:.8",
+                     Math.max(...nd.items.map((x) => x.tokens || 0), 1))
+          : `<div style="color:var(--muted);font-size:12px">nothing on disk
+             at this folder</div>`}
+      </td></tr>`; }).join("")}</tbody></table>`;
     el.querySelectorAll("td.skSpark").forEach((c) =>
       c.addEventListener("click", (ev) => {
         ev.stopPropagation();
         window.ccw.sparkZoomRow(c.parentElement,
           {counts: c.dataset.spark.split(",").map(Number),
-           tokens: c.dataset.sparktok.split(",").map(Number)}, null, 7);
+           tokens: c.dataset.sparktok.split(",").map(Number)}, null, 8);
       }));
     el.querySelectorAll("tr.drillable").forEach((r) =>
       r.addEventListener("click", (ev) => {
@@ -249,14 +229,11 @@
         next.style.display = open ? "none" : "table-row";
         r.querySelector(".ichev").textContent = open ? "▸" : "▾";
       }));
-    el.querySelectorAll(".lHead").forEach((h) =>
-      h.addEventListener("click", (ev) => {
-        if (ev.target.closest("[data-tip]") &&
-            ev.target.closest(".chev") === null &&
-            ev.target.classList.contains("num")) return;
+    el.querySelectorAll("tr.lNode").forEach((h) =>
+      h.addEventListener("click", () => {
         const inv = h.nextElementSibling;
         const open = inv.style.display !== "none";
-        inv.style.display = open ? "none" : "block";
+        inv.style.display = open ? "none" : "table-row";
         h.querySelector(".chev").textContent = open ? "▸" : "▾";
       }));
     bindTips(el);
