@@ -106,6 +106,16 @@ class TestScan(unittest.TestCase):
         names = [i["name"] for i in nodes[0]["items"]]
         self.assertIn("user plugins (1)", names)
 
+    def test_user_node_acknowledges_project_scoped_plugins(self):
+        self.home.mkdir(parents=True, exist_ok=True)
+        self._registry(["u@m", "p@m"])
+        (self.home / "settings.json").write_text(json.dumps(
+            {"enabledPlugins": {"u@m": True}}))
+        nodes = self._tree([])
+        info = next(i for i in nodes[0]["items"] if i["tag"] == "info")
+        self.assertIn("1 plugins", info["name"])
+        self.assertIsNone(info["tokens"])  # informational, never a number
+
     def test_missing_paths_yield_quiet_tree(self):
         self.home.mkdir(parents=True, exist_ok=True)
         nodes = self._tree([{"project": "-x", "cwd": "/nonexistent/path",

@@ -208,6 +208,14 @@ def context_tree(projects, claude_home=None, stop_at=None):
         uitems.append(_stub_item("user plugins", pdescs,
                                  "Enabled at user scope — eager stubs,"
                                  " descriptions on use"))
+    hidden = len(reg) - len(user_keys)
+    if hidden > 0:
+        uitems.append({"name": f"installed, enabled per-project"
+                               f" ({hidden} plugins)", "tokens": None,
+                       "note": "Files live in the user cache but load only"
+                               " where enabled — costed under those"
+                               " project nodes below",
+                       "tag": "info"})
     uitems.append({"name": "harness base + tool schemas", "tokens": None,
                    "note": "System prompt, built-in tools — not itemizable"
                            " from files", "tag": "fixed"})

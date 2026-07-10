@@ -28,6 +28,7 @@
     prunable: "background:var(--tag-yellow-bg);color:var(--tag-yellow)",
     fixed: "background:#F2F1EE;color:var(--sec)",
     unknown: "background:var(--red-bg);color:var(--red)",
+    info: "background:transparent;color:var(--muted);border:1px dashed var(--border)",
   };
   const tag = (t, text) => `<span style="font-family:var(--mono);font-size:10px;
     letter-spacing:.05em;text-transform:uppercase;border-radius:9999px;
@@ -136,7 +137,8 @@
             ? " · click to drill" : ""}</td>
         <td style="text-align:right;border-bottom:1px solid #F7F6F3">${
           tag(it.tag, it.tag === "prunable" ? "prunable" :
-              it.tag === "fixed" ? "fixed cost" : "unknown")}</td>
+              it.tag === "fixed" ? "fixed cost" :
+              it.tag === "info" ? "elsewhere" : "unknown")}</td>
       </tr>` + (it.skills ? `<tr class="idrill" style="display:none">
         <td colspan="5" style="padding:0">${skillRows(it.skills)}</td>
       </tr>` : "")).join("") + `</table>`;
