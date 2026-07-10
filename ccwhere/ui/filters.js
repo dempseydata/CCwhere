@@ -90,7 +90,7 @@ window.ccw = (function () {
       return;
     }
     const MODES = [
-      ["counts", "invocations / day", { precision: 0 }],
+      ["counts", "uses / day", { precision: 0 }],
       ["tokens", "direct message tokens / day",
        { callback: (v) => fmtTok(v) }],
     ].filter(([k]) => series[k]);

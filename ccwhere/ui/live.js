@@ -29,11 +29,11 @@
 
   async function render(el) {
     el.innerHTML = `
-      <div class="kicker">Live · disk truth · scanned at page load</div>
+      <div class="kicker">Live · checked just now</div>
       <h1 style="margin-bottom:2px">What is running now</h1>
       <div style="font-size:12.5px;color:var(--sec);margin-bottom:14px">
-        Read-only: observe, never touch. Liveness from session-file writes —
-        independent of sync.</div>
+        Read-only: observe, never touch. A session counts as live when
+        Claude Code recently wrote to its history file.</div>
       <div id="lvOpen" style="margin-bottom:18px"></div>
       <div id="lvList" style="color:var(--muted)">looking…</div>`;
     const d = await (await fetch("/api/live", {cache: "no-store"})).json();
@@ -41,10 +41,10 @@
     el.querySelector("#lvOpen").innerHTML = !d.open.length ? "" :
       `<span style="font-family:var(--mono);font-size:11px;
          color:var(--muted)">open windows</span> ` +
-      d.open.map((o) => `<span data-tip="From the process table (ps + lsof),
-        read-only. An open window that isn't conversing writes no history,
-        so it cannot be matched to a specific session — counted per
-        directory." style="font-family:var(--mono);font-size:11.5px;
+      d.open.map((o) => `<span data-tip="Counted from programs running on
+        this machine, read-only. A window that isn't mid-conversation
+        writes no history, so it can't be tied to a specific session —
+        counted per folder." style="font-family:var(--mono);font-size:11.5px;
         border:1px solid var(--border);border-radius:9999px;
         padding:3px 11px;margin-left:6px;color:var(--sec);cursor:help">
         ${dirLabel(o.cwd)} × ${o.count}</span>`).join("");

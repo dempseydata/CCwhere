@@ -144,8 +144,12 @@ class TestServer(unittest.TestCase):
         tree = led["tree"]
         self.assertEqual(tree[0]["label"], "user level (~/.claude)")
         self.assertEqual(tree[0]["items"][-1]["tag"], "fixed")  # harness line
-        # accumulated grows monotonically down each branch
+        # accumulated grows monotonically down each branch (dormant nodes
+        # carry no numbers and are exempt)
         for nd in tree[1:]:
+            if nd.get("dormant"):
+                self.assertIsNone(nd["accumulated"])
+                continue
             self.assertGreaterEqual(nd["accumulated"], nd["additional"])
             for key in ("label", "depth", "items"):
                 self.assertIn(key, nd)

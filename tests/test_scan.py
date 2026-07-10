@@ -116,6 +116,31 @@ class TestScan(unittest.TestCase):
         self.assertIn("1 plugins", info["name"])
         self.assertIsNone(info["tokens"])  # informational, never a number
 
+    def test_dormant_subfolders_present_without_numbers(self):
+        self.home.mkdir(parents=True, exist_ok=True)
+        proj = self.root / "p"
+        proj.mkdir()
+        (proj / "CLAUDE.md").write_text("x" * 400)          # 100 tok
+        kb = proj / "kb"                                    # never a cwd
+        self._skill_at(kb, "gap")
+        empty = proj / "junk" / ".claude"                   # content-free
+        empty.mkdir(parents=True)
+        nodes = self._tree([{"project": "-p", "cwd": str(proj),
+                             "median": 9_000, "n": 3}])
+        d = next(n for n in nodes if n["label"] == "kb")
+        self.assertTrue(d["dormant"])
+        self.assertIsNone(d["additional"])                  # never loaded
+        self.assertIsNone(d["accumulated"])
+        self.assertIsNone(d["median"])
+        self.assertEqual(d["depth"], 2)                     # child of p
+        # inventory still drillable: file facts, not measured load
+        item = next(i for i in d["items"] if i.get("skills"))
+        self.assertEqual(item["skills"][0]["name"], "gap")
+        # content-free subfolder stays invisible
+        self.assertNotIn("junk", [n["label"] for n in nodes])
+        # visited nodes are never dormant
+        self.assertFalse(nodes[1].get("dormant"))
+
     def test_missing_paths_yield_quiet_tree(self):
         self.home.mkdir(parents=True, exist_ok=True)
         nodes = self._tree([{"project": "-x", "cwd": "/nonexistent/path",

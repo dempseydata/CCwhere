@@ -2,15 +2,16 @@
 shared-floor estimate. Token sizes are size/4 estimates (kill-test #2 method);
 the measured median carries authority — these numbers only guide pruning."""
 import json
+import os
 import re
 from pathlib import Path
 
 HOME = Path.home()
 
 _NOTES = {
-    "CLAUDE.md": "Project instructions at the working directory root",
-    "AGENTS.md": "Agent conventions — loaded alongside CLAUDE.md",
-    ".mcp.json": "Project MCP servers — schemas/instructions load in scope",
+    "CLAUDE.md": "Instructions file — loads in full when a session starts here",
+    "AGENTS.md": "More instructions — loads in full alongside CLAUDE.md",
+    ".mcp.json": "Connected tools (MCP) — their definitions load at session start",
 }
 
 
@@ -141,7 +142,7 @@ def _instruction_items(d, home=None, project_dirname=None):
                     / "MEMORY.md")
         if t:
             items.append({"name": "memory/MEMORY.md", "tokens": t,
-                          "note": "Persistent memory index for this project",
+                          "note": "Claude's saved memory for this project — loads every session",
                           "tag": "prunable"})
     return items
 
@@ -160,7 +161,7 @@ def _dir_items(d, home, reg, user_keys, project_dirname=None):
     descs = _tier_descs(d)
     if descs:
         items.append(_stub_item(".claude/skills+commands", descs,
-                                "Eager stubs; full descriptions load on use"))
+                                "Small fixed cost per skill at start; the rest loads on use"))
     merged = {}
     for nm in ("settings.json", "settings.local.json"):
         m = _enabled_map(d / ".claude" / nm)
@@ -171,13 +172,29 @@ def _dir_items(d, home, reg, user_keys, project_dirname=None):
     pdescs = [x for k in keys for x in reg[k]]
     if pdescs:
         items.append(_stub_item("plugins enabled here", pdescs,
-                                "Project-enabled plugins — eager stubs;"
-                                " descriptions load on use"))
+                                "Plugins switched on for this folder —"
+                                " small fixed cost each at start"))
     return items
 
 
 def _has_content(d):
     return any(_tokens(d / n) for n in _NOTES) or (d / ".claude").is_dir()
+
+
+def _dormant_dirs(keep):
+    """Content-bearing subfolders of observed session roots that were never
+    themselves a session root: present on disk, never loaded — so no
+    measured token load exists for them."""
+    found = {}
+    for base in list(keep.values()):
+        for root, dirs, _ in os.walk(base):
+            dirs[:] = [x for x in dirs
+                       if not x.startswith(".") and x not in _SKIP_DIRS]
+            for x in dirs:
+                p = Path(root, x)
+                if str(p) not in keep and _has_content(p):
+                    found[str(p)] = p
+    return found
 
 
 def context_tree(projects, claude_home=None, stop_at=None):
@@ -194,31 +211,32 @@ def context_tree(projects, claude_home=None, stop_at=None):
     t = _tokens(home / "CLAUDE.md")
     if t:
         uitems.append({"name": "~/.claude/CLAUDE.md", "tokens": t,
-                       "note": "User instructions — every session",
+                       "note": "Your personal instructions — load in every session",
                        "tag": "prunable"})
     udescs = (_skill_descs(home / "skills", pkg="(user)")
               if (home / "skills").is_dir() else [])
     udescs.extend(_command_descs(home / "commands", pkg="(user)"))
     if udescs:
         uitems.append(_stub_item("~/.claude/skills+commands", udescs,
-                                 "User-scoped — eager stubs, descriptions"
-                                 " on use"))
+                                 "Load in every session — small fixed"
+                                 " cost each at start"))
     pdescs = [x for k in user_keys for x in reg[k]]
     if pdescs:
         uitems.append(_stub_item("user plugins", pdescs,
-                                 "Enabled at user scope — eager stubs,"
-                                 " descriptions on use"))
+                                 "Switched on everywhere — small fixed"
+                                 " cost each at start"))
     hidden = len(reg) - len(user_keys)
     if hidden > 0:
-        uitems.append({"name": f"installed, enabled per-project"
+        uitems.append({"name": f"installed, switched on per-folder"
                                f" ({hidden} plugins)", "tokens": None,
-                       "note": "Files live in the user cache but load only"
-                               " where enabled — costed under those"
-                               " project nodes below",
+                       "note": "Installed, but only switched on in specific"
+                               " folders — counted under those folders"
+                               " below",
                        "tag": "info"})
-    uitems.append({"name": "harness base + tool schemas", "tokens": None,
-                   "note": "System prompt, built-in tools — not itemizable"
-                           " from files", "tag": "fixed"})
+    uitems.append({"name": "Claude Code overhead", "tokens": None,
+                   "note": "System prompt and built-in tools — a real cost"
+                           " in every session, but not visible as files;"
+                           " see the footnote", "tag": "fixed"})
     uadd = sum(i["tokens"] or 0 for i in uitems)
     nodes = [{"path": "~", "label": "user level (~/.claude)", "depth": 0,
               "additional": uadd, "accumulated": uadd,
@@ -243,26 +261,38 @@ def context_tree(projects, claude_home=None, stop_at=None):
             if d == c or _has_content(d):
                 keep[str(d)] = d
 
-    order = sorted(keep)
+    dorm = _dormant_dirs(keep)
+    order = sorted(set(keep) | set(dorm))
     acc = {"~": uadd}
     depth_of = {"~": 0}
     for key in order:
-        d = keep[key]
-        parent = "~"
-        for anc in d.parents:
-            if str(anc) in keep:
-                parent = str(anc)
-                break
+        dormant = key not in keep
+        d = dorm[key] if dormant else keep[key]
         m = med.get(key, (None, None, None))
         items = _dir_items(d, home, reg, user_keys, project_dirname=m[2])
-        add = sum(i["tokens"] or 0 for i in items)
-        accumulated = acc[parent] + add
-        acc[key] = accumulated
+        if dormant and not items:
+            continue
+        parent = "~"
+        for anc in d.parents:
+            if str(anc) in depth_of:
+                parent = str(anc)
+                break
         depth = depth_of[parent] + 1
         depth_of[key] = depth
         base = Path(parent) if parent != "~" else None
         label = str(d.relative_to(base)) if base else \
             str(d).replace(str(Path.home()), "~")
+        if dormant:
+            # ponytail: item sizes stay as file facts (what a session opened
+            # here WOULD add); node columns stay empty — nothing measured.
+            nodes.append({"path": key, "label": label, "depth": depth,
+                          "additional": None, "accumulated": None,
+                          "median": None, "n": None, "dormant": True,
+                          "items": items})
+            continue
+        add = sum(i["tokens"] or 0 for i in items)
+        accumulated = acc[parent] + add
+        acc[key] = accumulated
         nodes.append({"path": key, "label": label, "depth": depth,
                       "additional": add, "accumulated": accumulated,
                       "median": m[0], "n": m[1], "items": items})

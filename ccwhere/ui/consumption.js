@@ -5,22 +5,22 @@
   const css = (v) => getComputedStyle(document.documentElement)
     .getPropertyValue(v).trim();
   const COMPONENTS = [
-    ["cache_read", "cache read", "--cat-cache-read"],
+    ["cache_read", "re-read", "--cat-cache-read"],
     ["input", "input", "--cat-input"],
     ["output", "output", "--cat-output"],
-    ["cache_create", "cache create", "--cat-cache-create"],
+    ["cache_create", "saved for re-use", "--cat-cache-create"],
   ];
-  const LENS_A_TIP = "Lens A — total tokens of every session where this " +
-    "consumer appeared at least once. Tends to OVERSTATE: one long session " +
-    "inflates everything it touched.";
-  const LENS_B_TIP = "Lens B — only the tokens of the messages that directly " +
-    "invoked this consumer (a message can credit several consumers). Tends " +
-    "to UNDERSTATE: a skill's real cost lands downstream of the call.";
+  const LENS_A_TIP = "Counts every token of every session this consumer " +
+    "appeared in. Reads HIGH — one long session inflates everything it " +
+    "touched.";
+  const LENS_B_TIP = "Counts only the messages that directly used this " +
+    "consumer (a message can credit several). Reads LOW — the effect of a " +
+    "call lands after the call.";
   const FLAG_TIPS = {
-    agree: "Ranks high on BOTH lenses — the finding is robust. Safe to act on.",
-    disagree: "High on one lens, low on the other — likely a long-session " +
-      "artifact, not a real burner. Inspect its sessions before acting.",
-    n1: "Seen in a single session — one observation, no basis for a ranking.",
+    agree: "Ranks high on BOTH counts — the finding is robust. Safe to act on.",
+    disagree: "High on one count, low on the other — usually one long " +
+      "session inflating it, not a real burner. Check its sessions first.",
+    n1: "Seen in one session only — a single observation, no basis for a ranking.",
   };
 
   const state = { preset: "30d", from: null, to: null,
@@ -86,7 +86,8 @@
       <div id="cPlot"><canvas id="cChart" height="90"></canvas></div>
       <div id="cModels" style="margin-top:28px"></div>
       <div id="cLeagueWrap" style="margin-top:30px">
-        <div class="kicker">League table · dual-lens attribution</div>
+        <div class="kicker">League table · ranked by direct message tokens,
+        and whole session tokens</div>
         <h1 style="margin-bottom:8px">Consumers</h1>
         <div id="cTypes" style="display:flex;align-items:center;gap:8px;
           flex-wrap:wrap;margin-bottom:12px"></div>
@@ -101,12 +102,14 @@
     ["skill", "skills", null],
     ["mcp", "MCP servers", null],
     ["cli", "CLI programs", null],
-    ["builtin", "built-ins", "Built-in tools (Read, Bash, Edit…) ride in " +
-      "nearly every session, so the Session lens hands them the whole " +
-      "corpus and they drown the ranking. Not pruneable anyway."],
-    ["shell", "shell utilities", "OS-shipped commands (grep, ls, sed…) — " +
-      "detected by where the binary lives, not a curated list. Ubiquitous " +
-      "and unprunable, so off by default. Includes anything you demote."],
+    ["builtin", "built-ins", "Claude Code's own tools (Read, Bash, Edit…) " +
+      "appear in nearly every session, so whole-session counting hands " +
+      "them everything and they drown the ranking. Nothing to prune " +
+      "anyway."],
+    ["shell", "shell utilities", "Commands that ship with the operating " +
+      "system (grep, ls, sed…) — detected by where the program lives, not " +
+      "a curated list. In every session and not yours to uninstall, so " +
+      "off by default. Includes anything you move out yourself."],
   ];
 
   function renderTypes(el) {
@@ -122,7 +125,7 @@
         color:var(--muted)">counting</span>
       <span id="cFresh" data-tip="Count only input + output — the new work a
         consumer caused — instead of the full context of its invoking
-        messages. Re-ranks both lenses; agreement flags recompute.
+        messages. Re-ranks both columns; agreement flags recompute.
         Experimental: being evaluated, may not stay."
         style="${chipCSS(state.fresh)}">fresh work only</span>`;
     box.querySelector("#cFresh").addEventListener("click", () => {
@@ -233,8 +236,11 @@
         <div class="stat" style="font-size:15px;line-height:2.1">
           ${s.top ? s.top.consumer : "—"}
           <small>${s.top ? s.top.type : ""}</small></div>
-        <div class="delta">${s.top && s.top.agree ? "top of both lenses" : ""}</div></div>
-      <div><div class="label">Cache hit rate · target 70%</div>
+        <div class="delta">${s.top && s.top.agree ? "top on both counts" : ""}</div></div>
+      <div><div class="label" data-tip="How much of the context Claude re-read
+          from cache instead of paying full price to resend. Higher is
+          cheaper." style="border-bottom:1px dotted var(--muted);
+          cursor:help;display:inline-block">Context re-used · target 70%</div>
         <div style="margin-top:8px">${bulletSVG(s.cache_rate_pct)}</div></div>`;
     bindTips(el.querySelector("#cStrip"));
   }
@@ -278,8 +284,8 @@
           ${g ? "border-bottom:1px solid var(--border)" : ""};
           padding:0 8px 3px">${g}</th>`).join("")}</tr>
       <tr>
-        ${["model", "", "msgs", "input", "output", "cache read",
-           "cache create", "total", "≈ cost"].map((h, i) =>
+        ${["model", "", "messages", "input", "output", "re-read",
+           "saved", "total", "≈ cost"].map((h, i) =>
           `<th style="text-align:${i < 2 ? "left" : "right"};
             font-family:var(--mono);font-size:10.5px;letter-spacing:.06em;
             text-transform:uppercase;color:var(--muted);font-weight:500;
@@ -488,11 +494,11 @@
     const flag = (f) => f === "agree"
       ? `<span data-tip="${FLAG_TIPS.agree}" style="font-family:var(--mono);
           font-size:10px;color:var(--sec);border:1px solid var(--border);
-          border-radius:9999px;padding:2px 8px">both lenses</span>`
+          border-radius:9999px;padding:2px 8px">high on both counts</span>`
       : f ? `<span data-tip="${FLAG_TIPS[f]}" style="font-family:var(--mono);
           font-size:10px;background:var(--red-bg);color:var(--red);
           border-radius:9999px;padding:2px 8px">
-          ${f === "n1" ? "N=1" : "lenses disagree"}</span>` : "";
+          ${f === "n1" ? "seen once" : "counts disagree"}</span>` : "";
     const bar = (v, mx, dim) => `<span style="display:inline-block;height:8px;
       border-radius:2px;background:var(--ink);opacity:${dim ? ".45" : ".85"};
       width:${Math.max(v / mx * 120, 2)}px;margin-right:8px;vertical-align:1px">
@@ -504,7 +510,10 @@
         <th style="text-align:left;font-family:var(--mono);font-size:10.5px;
           letter-spacing:.06em;text-transform:uppercase;color:var(--muted);
           font-weight:500;padding-bottom:8px;border-bottom:1px solid var(--border)">
-          consumer</th>
+          <span data-tip="Anything that uses your tokens and that you
+          could act on — a skill, an MCP server, or a program you installed."
+          style="border-bottom:1px dotted var(--muted);cursor:help"
+          >consumer</span></th>
         <th></th>
         <th style="text-align:right;font-family:var(--mono);font-size:10.5px;
           letter-spacing:.06em;text-transform:uppercase;color:var(--muted);
@@ -514,8 +523,8 @@
           letter-spacing:.06em;text-transform:uppercase;color:var(--muted);
           font-weight:500;border-bottom:1px solid var(--border)">
           <span data-tip="${LENS_A_TIP}" ${sortable("session_tokens")}>
-          <span style="border-bottom:1px dotted var(--muted)">tokens of
-          sessions involving</span>${sortMark("session_tokens")}</span></th>
+          <span style="border-bottom:1px dotted var(--muted)">whole
+          session tokens</span>${sortMark("session_tokens")}</span></th>
         <th style="text-align:right;font-family:var(--mono);font-size:10.5px;
           letter-spacing:.06em;text-transform:uppercase;color:var(--muted);
           font-weight:500;border-bottom:1px solid var(--border)">
@@ -525,7 +534,7 @@
         <th style="text-align:right;font-family:var(--mono);font-size:10.5px;
           letter-spacing:.06em;text-transform:uppercase;color:var(--muted);
           font-weight:500;border-bottom:1px solid var(--border)">
-          14d invocations</th>
+          uses · last 14 days</th>
         <th style="border-bottom:1px solid var(--border)"></th></tr></thead>
       <tbody>${(shown = rows.slice(0, 30)
         // pinned: every demoted item stays restorable past the row cut
@@ -537,7 +546,7 @@
               to shell utilities — out of this default view, restorable there.
               Saved to ~/.ccwhere/overrides.json" style="cursor:pointer;`
           : demoted
-          ? ` data-ov="0" data-consumer="${r.consumer}" data-tip="Demoted by
+          ? ` data-ov="0" data-consumer="${r.consumer}" data-tip="Moved out by
               you — click to restore to the default view" style="cursor:pointer;
               border:1px dashed var(--muted);`
           : ` style="`;

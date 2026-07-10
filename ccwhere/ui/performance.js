@@ -58,14 +58,17 @@
 
   function renderTable(el, rows) {
     const keys = [["calls", "calls"], ["err_rate", "errors"],
-                  ["p50", "p50"], ["p95", "p95"], ["max", "max"]];
+                  ["p50", "typical", "Median (p50) — half of calls were faster"],
+                  ["p95", "worst 5%", "p95 — 5% of calls were slower than this"],
+                  ["max", "worst", "The single slowest call"]];
     rows = [...rows].sort((a, b) =>
       (b[state.sortKey] ?? -1) - (a[state.sortKey] ?? -1));
-    const th = (k, label) => `<th style="text-align:right;
+    const th = (k, label, tip) => `<th style="text-align:right;
         font-family:var(--mono);font-size:10.5px;letter-spacing:.06em;
         text-transform:uppercase;color:var(--muted);font-weight:500;
         border-bottom:1px solid var(--border)">
-        <span data-sort="${k}" style="cursor:pointer">${label}${
+        <span data-sort="${k}"${tip ? ` data-tip="${tip}"` : ""}
+          style="cursor:pointer">${label}${
           state.sortKey === k ? " ▾" : ""}</span></th>`;
     el.querySelector("#pTable").innerHTML = `
       <table style="width:100%;border-collapse:collapse">
@@ -75,7 +78,7 @@
           font-weight:500;padding-bottom:8px;
           border-bottom:1px solid var(--border)">tool</th>
         <th style="border-bottom:1px solid var(--border)"></th>
-        ${keys.map(([k, l]) => th(k, l)).join("")}
+        ${keys.map(([k, l, tip]) => th(k, l, tip)).join("")}
         <th style="border-bottom:1px solid var(--border)"></th></tr></thead>
       <tbody>${rows.slice(0, 40).map((r) => `<tr>
         <td class="num" style="padding:8px 12px 8px 0;font-size:12.5px;
@@ -99,12 +102,12 @@
         <td class="num" style="text-align:right;font-size:12px;
           color:var(--sec);border-bottom:1px solid #F2F1EE">${fmtMs(r.max)}</td>
         <td style="text-align:right;border-bottom:1px solid #F2F1EE">${
-          r.n_paired < 10 ? `<span data-tip="Only ${r.n_paired} paired
-            durations — percentiles are weak evidence at this sample size."
-            style="font-family:var(--mono);font-size:10px;
+          r.n_paired < 10 ? `<span data-tip="Only ${r.n_paired} calls
+            returned with a measurable time — weak evidence at this sample
+            size." style="font-family:var(--mono);font-size:10px;
             background:var(--tag-yellow-bg);color:var(--tag-yellow);
             border-radius:9999px;padding:2px 8px;white-space:nowrap">
-            low sample · N=${r.n_paired}</span>` : ""}</td>
+            only ${r.n_paired} timed calls</span>` : ""}</td>
       </tr>`).join("")}</tbody></table>`;
     el.querySelectorAll("[data-sort]").forEach((h) =>
       h.addEventListener("click", () => {
@@ -129,15 +132,15 @@
         flex-wrap:wrap;margin-bottom:10px"></div>
       <div id="pFiltersProj" style="display:flex;align-items:center;gap:8px;
         flex-wrap:wrap;margin-bottom:20px"></div>
-      <div class="kicker">Performance · tool_use → tool_result pairing</div>
+      <div class="kicker">Performance · how long tools take</div>
       <h1 style="margin-bottom:2px">What is slow or failing</h1>
       <div style="font-size:12.5px;color:var(--sec);margin-bottom:14px">
-        Percentiles cover <span data-tip="A call whose result never arrived
-        (crashed session, or paired beyond the 10-minute cap). Counted in
-        calls, never given an invented duration." style="border-bottom:1px
-        dotted var(--muted);cursor:help">paired durations</span> only.
-        MCP servers break out per tool — the league prunes servers,
-        this table finds slow tools.</div>
+        Times count only <span data-tip="A call whose result never came
+        back (crashed session, or past the 10-minute cap) counts as a call
+        but never gets an invented time." style="border-bottom:1px
+        dotted var(--muted);cursor:help">calls whose result came back</span>.
+        MCP servers break out per tool — the Consumers table is where you
+        prune servers; this table finds slow tools.</div>
       <div id="pTable" style="color:var(--muted)">loading…</div>`;
     renderFilters(el);
     bindTips(el);

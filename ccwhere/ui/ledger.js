@@ -46,7 +46,7 @@
   function skillStatus(u) {
     if (!u || !u.uses) return tag("prunable", "never used");
     const days = (Date.now() - new Date(u.last)) / 864e5;
-    return days > 30 ? tag("prunable", "stale >30d") : tag("fixed", "active");
+    return days > 30 ? tag("prunable", "unused 30+ days") : tag("fixed", "active");
   }
 
   function skillRows(skills) {
@@ -82,15 +82,16 @@
         <td style="font-family:var(--mono);font-size:11.5px;width:250px;
           padding:4px 12px 4px 0;border-bottom:1px solid #F7F6F3">
           ${s.name}${s.kind === "command"
-            ? ` <span style="color:var(--muted);font-size:9.5px">· cmd</span>`
+            ? ` <span style="color:var(--muted);font-size:9.5px">· command</span>`
             : ""}</td>
         <td style="width:130px;border-bottom:1px solid #F7F6F3">
           <div style="height:6px;border-radius:2px;background:#B8B6B0;width:${
             Math.max(s.tokens / maxT * 110, 2).toFixed(0)}px"></div></td>
         <td class="num" style="font-size:11.5px;text-align:right;width:60px;
           border-bottom:1px solid #F7F6F3">${s.tokens} tok</td>
-        <td class="num" data-tip="Full SKILL.md body — loads when the skill
-          is invoked" style="font-size:11.5px;text-align:right;width:70px;
+        <td class="num" data-tip="The skill's full text — loads only when
+          the skill actually runs" style="font-size:11.5px;text-align:right;
+          width:70px;
           color:var(--sec);border-bottom:1px solid #F7F6F3">${
             s.file_tok ? fmtK(s.file_tok) : "—"} body</td>
         <td class="num" style="font-size:11.5px;text-align:right;width:50px;
@@ -132,11 +133,11 @@
             it.tokens == null ? "—" : fmtK(it.tokens)}</td>
         <td style="color:var(--sec);font-size:12px;padding-left:12px;
           border-bottom:1px solid #F7F6F3">${it.note}${it.catalog
-            ? ` · descriptions ${fmtK(it.catalog)} on use` : ""}${it.full
-            ? ` · bodies ${fmtK(it.full)} when invoked` : ""}${it.skills
-            ? " · click to drill" : ""}</td>
+            ? ` · descriptions ${fmtK(it.catalog)} load on use` : ""}${it.full
+            ? ` · full text ${fmtK(it.full)} loads when run` : ""}${it.skills
+            ? " · click for the list" : ""}</td>
         <td style="text-align:right;border-bottom:1px solid #F7F6F3">${
-          tag(it.tag, it.tag === "prunable" ? "prunable" :
+          tag(it.tag, it.tag === "prunable" ? "yours to trim" :
               it.tag === "fixed" ? "fixed cost" :
               it.tag === "info" ? "elsewhere" : "unknown")}</td>
       </tr>` + (it.skills ? `<tr class="idrill" style="display:none">
@@ -148,28 +149,39 @@
     el.innerHTML = `<div class="kicker">Context ledger · where context
       comes from</div>
       <h1 style="margin-bottom:2px">What sessions pay before work starts</h1>
-      <div style="font-size:12.5px;color:var(--sec)">The
-        <span data-tip="Median of each session's first API call context (input +
-        cache read + cache create). This is what actually happened — the one
-        number that cannot be wrong." style="border-bottom:1px dotted
-        var(--muted);cursor:help">measured median</span> is authoritative.
-        The tree shows the eager estimate per folder level:
-        <span data-tip="Skill, command, and plugin entries cost a small
-        calibrated stub eagerly (~25 tok, probes 2026-07-09: a 2,170-token
-        description added 46). Their full descriptions are a catalog that
-        loads on use — shown as the secondary number."
-        style="border-bottom:1px dotted var(--muted);cursor:help">stubs, not
-        descriptions</span> — and the
-        <span data-tip="The share of a node's measured median that neither
-        its branch's files nor stubs predict: hook output, MCP instructions,
-        git status, surface differences. Shown, never hidden."
-        style="border-bottom:1px dotted var(--muted);cursor:help">unattributed
-        share</span> is shown, never hidden.</div>
+      <div style="font-size:12.5px;color:var(--sec)">Every session starts
+        with context already loaded before you type a word. Two kinds of
+        number here, and one honest gap:
+        <span data-tip="Taken from your real session history: how much
+        context each session in this folder actually started with, middle
+        value (median). It happened — when the estimate disagrees with it,
+        believe this column." style="border-bottom:1px dotted
+        var(--muted);cursor:help">measured</span> is what your sessions
+        actually started with — it always wins;
+        <span data-tip="Predicted from the files on disk: instruction files
+        count in full, and each installed skill or plugin costs a small
+        fixed amount up front (~25 tokens — measured, not guessed). The
+        rest of a skill only loads if it gets used."
+        style="border-bottom:1px dotted var(--muted);cursor:help">added here
+        / total so far</span> is our estimate from the files on disk; and
+        <span data-tip="Measured minus estimate: the share no file on disk
+        accounts for. Mostly Claude Code itself — see the footnote for
+        what's in it. We show it rather than pretend it isn't there."
+        style="border-bottom:1px dotted var(--muted);cursor:help"
+        >claude code overhead</span> is the gap between them, shown, never
+        hidden.</div>
       <div id="lTree" style="color:var(--muted);margin-top:16px">loading…</div>
-      <div style="font-family:var(--mono);font-size:11px;color:var(--muted);
-        margin-top:14px">accumulated = the sum down one branch — visiting a
-        sibling folder mid-session loads its content on use, not modeled ·
-        stub calibration ${""}≈25 tok/entry (measured range 13–46)</div>`;
+      <div id="lFoot" style="font-family:var(--mono);font-size:11px;
+        color:var(--muted);margin-top:14px">total so far = added up down one
+        branch of folders — working in a second folder mid-session loads its
+        content when used, not counted here · each installed skill or plugin
+        costs ${""}≈25 tokens up front (measured range 13–46)<br>claude code
+        overhead = measured minus total so far. What's in it: Claude Code's
+        own system prompt and built-in tools (${""}≈19K — measured by opening
+        a session in an empty folder) · tool definitions from any connected
+        MCP servers · whatever your session-start hooks inject · git status
+        and environment info. The first is a fixed cost of Claude Code
+        existing; MCP servers and hooks are yours to prune.</div>`;
     bindTips(el);
     const led = await (await fetch("/api/ledger", {cache: "no-store"})).json();
     const th = (txt, align) => `<th style="text-align:${align};
@@ -180,24 +192,28 @@
     el.querySelector("#lTree").innerHTML = `
       <table style="width:100%;border-collapse:collapse"><thead><tr>
         ${th("folder", "left")}
-        ${th("additional", "right")}
-        ${th("accumulated", "right")}
-        ${th("measured median", "right")}
-        ${th("unattributed", "right")}
+        ${th("added here", "right")}
+        ${th("total so far", "right")}
+        ${th("measured", "right")}
+        ${th("claude code overhead", "right")}
       </tr></thead>
       <tbody>${led.tree.map((nd, i) => {
         const lowN = nd.n != null && nd.n < 3 ? ` <span style="
           font-family:var(--mono);font-size:10px;
           background:var(--tag-yellow-bg);color:var(--tag-yellow);
-          border-radius:9999px;padding:1px 7px">N=${nd.n}</span>` : "";
+          border-radius:9999px;padding:1px 7px">only ${nd.n} session${
+          nd.n === 1 ? "" : "s"}</span>` : "";
         return `<tr class="lNode" data-i="${i}" style="cursor:pointer">
         <td style="font-family:var(--mono);font-size:12.5px;
           padding:10px 12px 10px ${nd.depth * 26}px;
           border-bottom:1px solid #F2F1EE" data-tip="${nd.path}">
           <span class="chev" style="color:var(--muted);font-size:11px">▸</span>
-          ${nd.depth ? "└─ " : ""}${nd.label}${lowN}</td>
+          ${nd.depth ? "└─ " : ""}${nd.dormant ? `<span style="
+            color:var(--muted)">${nd.label} †</span>` : nd.label}${lowN}</td>
         <td class="num" style="text-align:right;font-size:12.5px;
-          border-bottom:1px solid #F2F1EE">+${fmtK(nd.additional)}</td>
+          border-bottom:1px solid #F2F1EE">${nd.dormant
+            ? `<span style="color:var(--muted)">—</span>`
+            : "+" + fmtK(nd.additional)}</td>
         <td class="num" style="text-align:right;font-size:13px;font-weight:600;
           border-bottom:1px solid #F2F1EE">${fmtK(nd.accumulated)}</td>
         <td class="num" style="text-align:right;font-size:13px;
@@ -216,6 +232,12 @@
           : `<div style="color:var(--muted);font-size:12px">nothing on disk
              at this folder</div>`}
       </td></tr>`; }).join("")}</tbody></table>`;
+    if (led.tree.some((nd) => nd.dormant)) {
+      el.querySelector("#lFoot").innerHTML +=
+        `<br>† skills/instructions exist in this folder, but no session has
+         ever been opened here — nothing has loaded yet, so there is nothing
+         to measure. Open the row to see what a session here would add.`;
+    }
     el.querySelectorAll("td.skSpark").forEach((c) =>
       c.addEventListener("click", (ev) => {
         ev.stopPropagation();

@@ -17,7 +17,7 @@ The performance view SHALL aggregate tool calls at the finest honest grain per c
 - **THEN** each appears as its own row, comparable against the playwright CLI row
 
 ### Requirement: Performance table UI
-The tab SHALL render a sortable table (calls, error rate, p50, p95, max — descending click-sort, league pattern), default-sorted by p95 descending — the "what is slow" question. Rows with fewer than 10 paired durations SHALL carry a visible `low sample · N=x` badge, never be hidden. Error rates SHALL render muted when zero and highlighted when non-zero, with no thresholds or traffic-light colouring. Type tags reuse the established colours. The tab SHALL use the shared filter bar (time presets + project multi-select) with identical behaviour to the consumption tab.
+The tab SHALL render a sortable table (calls, error rate, p50, p95, max — descending click-sort, league pattern), default-sorted by p95 descending — the "what is slow" question. Rows with fewer than 10 paired durations SHALL carry a visible low-sample badge stating the count in plain language (`only x timed calls`), never be hidden. Error rates SHALL render muted when zero and highlighted when non-zero, with no thresholds or traffic-light colouring. Type tags reuse the established colours. The tab SHALL use the shared filter bar (time presets + project multi-select) with identical behaviour to the consumption tab.
 
 #### Scenario: Slowness sorts first, evidence badged
 - **WHEN** the tab renders with defaults
