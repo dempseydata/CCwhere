@@ -491,7 +491,7 @@
       (state.sortKey === k ? "color:var(--ink);" : "") + `"`;
     const flag = (f) => f === "agree"
       ? `<span data-tip="${FLAG_TIPS.agree}" style="font-size:11px;
-          font-weight:600;background:var(--ok-bg);color:var(--ok);
+          font-weight:600;background:var(--ok-bg);color:var(--ok-text);
           border-radius:6px;padding:2px 8px">high on both counts</span>`
       : f ? `<span data-tip="${FLAG_TIPS[f]}" style="font-size:11px;
           font-weight:600;background:${f === "n1" ? "var(--red-bg)"

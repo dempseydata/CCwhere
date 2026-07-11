@@ -10,12 +10,12 @@
   --ink: #0a0a0a;
   --body: #1c1c1e;
   --sec: #5a5a5c;
-  --muted: #8a8a8c;
+  --muted: #6f6f72;  /* AA on card and canvas — carries real text */
   /* semantic states pair red with BLUE (Few, colorblind-safe), never green */
-  --ok: #3772cf; --ok-bg: rgba(55, 114, 207, 0.12);
-  --red: #d45656; --red-bg: rgba(212, 86, 86, 0.12);
+  --ok: #3772cf; --ok-bg: rgba(55, 114, 207, 0.12); --ok-text: #2b5fae;
+  --red: #b83c3c; --red-bg: rgba(212, 86, 86, 0.12);
   --tag-blue-bg: rgba(55, 114, 207, 0.12); --tag-blue: #3772cf;
-  --tag-yellow-bg: rgba(195, 125, 13, 0.12); --tag-yellow: #c37d0d;
+  --tag-yellow-bg: rgba(195, 125, 13, 0.12); --tag-yellow: #935e00;
   --tag-green-bg: rgba(0, 180, 138, 0.10); --tag-green: #00755a;
   /* categorical (validated 2026-07-07, dataviz six checks, light surface) —
      deliberately NOT brand colors; data ink stays perception-tested */

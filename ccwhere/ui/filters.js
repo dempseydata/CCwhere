@@ -48,7 +48,7 @@ window.ccw = (function () {
   const tagCSS = (t) =>
     t === "mcp" ? "var(--tag-blue-bg);color:var(--tag-blue)"
     : t === "cli" ? "var(--tag-green-bg);color:var(--tag-green)"
-    : t === "shell" || t === "builtin" ? "#F2F1EE;color:var(--sec)"
+    : t === "shell" || t === "builtin" ? "var(--row);color:var(--sec)"
     : "var(--tag-yellow-bg);color:var(--tag-yellow)";
 
   /* single tooltip layer shared by every tab */
@@ -116,7 +116,7 @@ window.ccw = (function () {
     row._chart = new Chart(td.querySelector("canvas"), {
       type: "bar",
       data: { labels, datasets: [{ data: series[MODES[0][0]],
-        backgroundColor: "#787774", borderRadius: 2 }] },
+        backgroundColor: "#5a5a5c", borderRadius: 2 }] },
       options: { maintainAspectRatio: false,
         plugins: { legend: { display: false } },
         scales: {
