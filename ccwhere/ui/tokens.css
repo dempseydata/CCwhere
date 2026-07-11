@@ -1,42 +1,50 @@
-/* ccwhere design tokens — DESIGN.md (minimalist-ui + Few rules) */
+/* ccwhere design tokens — house design system (docs mode of the author's shared DESIGN.md).
+   Inter/Geist Mono fall back to system faces; nothing is fetched. */
 :root {
-  --canvas: #F7F6F3;
-  --card: #FFFFFF;
-  --border: #EAEAEA;
-  --ink: #2F3437;
-  --sec: #787774;
-  --muted: #9B9891;
-  --red: #9F2F2D;
-  --red-bg: #FDEBEC;
-  --tag-blue-bg: #E1F3FE; --tag-blue: #1F6C9F;
-  --tag-yellow-bg: #FBF3DB; --tag-yellow: #956400;
-  --tag-green-bg: #E7F3EC; --tag-green: #23673F;
-  /* categorical (validated 2026-07-07, dataviz six checks, light surface) */
+  --canvas: #f7f7f7;
+  --card: #ffffff;
+  --border: #e5e5e5;
+  --row: #ededed;        /* table row dividers */
+  --row-soft: #f2f2f2;   /* drill rows, package bands */
+  --panel-border: #d4d4d6;
+  --ink: #0a0a0a;
+  --body: #1c1c1e;
+  --sec: #5a5a5c;
+  --muted: #8a8a8c;
+  /* semantic states pair red with BLUE (Few, colorblind-safe), never green */
+  --ok: #3772cf; --ok-bg: rgba(55, 114, 207, 0.12);
+  --red: #d45656; --red-bg: rgba(212, 86, 86, 0.12);
+  --tag-blue-bg: rgba(55, 114, 207, 0.12); --tag-blue: #3772cf;
+  --tag-yellow-bg: rgba(195, 125, 13, 0.12); --tag-yellow: #c37d0d;
+  --tag-green-bg: rgba(0, 180, 138, 0.10); --tag-green: #00755a;
+  /* categorical (validated 2026-07-07, dataviz six checks, light surface) —
+     deliberately NOT brand colors; data ink stays perception-tested */
   --cat-cache-read: #3B6FC4;
   --cat-input: #3E9464;
   --cat-output: #9B62CC;
   --cat-cache-create: #C0762C;
-  --sans: -apple-system, 'SF Pro Display', 'Helvetica Neue', sans-serif;
-  --serif: 'Iowan Old Style', 'Palatino Linotype', Georgia, serif;
-  --mono: ui-monospace, 'SF Mono', Menlo, monospace;
+  --sans: "Inter", -apple-system, 'SF Pro Text', 'Segoe UI', sans-serif;
+  --mono: "Geist Mono", ui-monospace, 'SF Mono', Menlo, monospace;
 }
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body {
   background: var(--canvas);
-  color: var(--ink);
+  color: var(--body);
   font-family: var(--sans);
   font-size: 14px;
-  line-height: 1.6;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
 }
-h1 { font-family: var(--serif); font-size: 26px; font-weight: 600;
-     letter-spacing: -0.02em; line-height: 1.1; }
-.kicker { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.08em;
-          text-transform: uppercase; color: var(--muted); }
+h1 { font-family: var(--sans); font-size: 22px; font-weight: 600;
+     letter-spacing: -0.3px; line-height: 1.3; color: var(--ink); }
+.kicker { font-family: var(--sans); font-size: 11px; font-weight: 600;
+          letter-spacing: 0.5px; text-transform: uppercase; color: var(--sec); }
 .num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
 button.primary {
-  background: #111; color: #fff; border: 0; border-radius: 6px;
-  padding: 7px 14px; font-family: var(--sans); font-size: 12.5px;
+  background: var(--ink); color: #fff; border: 0; border-radius: 9999px;
+  padding: 8px 18px; font-family: var(--sans); font-size: 13px;
   font-weight: 500; cursor: pointer;
 }
 button.primary:active { transform: scale(0.98); }
 button.primary[disabled] { opacity: 0.55; cursor: wait; }
+tr.lNode:hover > td, tr.drillable:hover > td { background: var(--row-soft); }

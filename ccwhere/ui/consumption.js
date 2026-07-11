@@ -46,8 +46,8 @@
     const mx = Math.max(...arr, 1);
     const bars = arr.map((v, i) =>
       v ? `<rect x="${i * 5}" y="${16 - v / mx * 13}" width="4" ` +
-          `height="${(v / mx * 13 + 2).toFixed(1)}" fill="#787774" rx="1"/>`
-        : `<rect x="${i * 5}" y="14.5" width="4" height="1.5" fill="#E3E1DC"/>`
+          `height="${(v / mx * 13 + 2).toFixed(1)}" fill="#5a5a5c" rx="1"/>`
+        : `<rect x="${i * 5}" y="14.5" width="4" height="1.5" fill="#e5e5e5"/>`
     ).join("");
     return `<svg width="70" height="17" viewBox="0 0 70 17">${bars}</svg>`;
   }
@@ -55,13 +55,13 @@
     if (pct == null) return "—";
     const w = 180, x = (v) => v / 100 * w;
     return `<svg width="${w + 58}" height="24">
-      <rect x="0" y="6" width="${x(60)}" height="12" fill="#D9D7D2"/>
-      <rect x="${x(60)}" y="6" width="${x(20)}" height="12" fill="#E8E6E1"/>
-      <rect x="${x(80)}" y="6" width="${x(20)}" height="12" fill="#F2F0EB"/>
-      <rect x="0" y="9" width="${x(Math.min(pct, 100))}" height="6" fill="#2F3437"/>
-      <rect x="${x(70)}" y="3" width="2.5" height="18" fill="#111"/>
+      <rect x="0" y="6" width="${x(60)}" height="12" fill="#ececec"/>
+      <rect x="${x(60)}" y="6" width="${x(20)}" height="12" fill="#f2f2f2"/>
+      <rect x="${x(80)}" y="6" width="${x(20)}" height="12" fill="#f7f7f7"/>
+      <rect x="0" y="9" width="${x(Math.min(pct, 100))}" height="6" fill="#0a0a0a"/>
+      <rect x="${x(70)}" y="3" width="2.5" height="18" fill="#3772cf"/>
       <text x="${w + 8}" y="17" font-family="ui-monospace,Menlo" font-size="12"
-        fill="#2F3437">${pct}%</text></svg>`;
+        fill="#1c1c1e">${pct}%</text></svg>`;
   }
 
   function render(el) {
@@ -114,15 +114,13 @@
 
   function renderTypes(el) {
     const box = el.querySelector("#cTypes");
-    box.innerHTML = `<span style="font-family:var(--mono);font-size:11px;
-        color:var(--muted)">types</span>` +
+    box.innerHTML = `<span style="font-size:12px;color:var(--muted)">types</span>` +
       TYPE_CHIPS.map(([k, label, tip]) =>
         `<span data-type="${k}"${tip ? ` data-tip="${tip}"` : ""}
           style="${chipCSS(state.types[k])}">${label}</span>`).join("") +
       `<span style="width:1px;height:18px;background:var(--border);
         margin:0 8px"></span>
-      <span style="font-family:var(--mono);font-size:11px;
-        color:var(--muted)">counting</span>
+      <span style="font-size:12px;color:var(--muted)">counting</span>
       <span id="cFresh" data-tip="Count only input + output — the new work a
         consumer caused — instead of the full context of its invoking
         messages. Re-ranks both columns; agreement flags recompute.
@@ -270,7 +268,7 @@
     const maxT = Math.max(...models.map(tot), 1);
     const cov = cost && cost.coverage_pct;
     const num = (v) => `<td class="num" style="text-align:right;font-size:12px;
-      border-bottom:1px solid #F2F1EE">${fmtTok(v)}</td>`;
+      border-bottom:1px solid var(--row)">${fmtTok(v)}</td>`;
     box.innerHTML = `
       <div class="kicker" style="margin-bottom:6px">By model${scope
         ? ` · ${scope}` : ""} · ≈ cost at
@@ -279,34 +277,34 @@
       <table style="width:100%;border-collapse:collapse"><thead>
       <tr>${[["", 3], ["fresh work", 2], ["context re-read", 2], ["", 2]]
         .map(([g, span]) => `<th colspan="${span}" style="text-align:center;
-          font-family:var(--mono);font-size:9.5px;letter-spacing:.08em;
-          text-transform:uppercase;color:var(--muted);font-weight:500;
+          font-family:var(--sans);font-size:10px;font-weight:600;letter-spacing:.06em;
+          text-transform:uppercase;color:var(--sec);font-weight:600;
           ${g ? "border-bottom:1px solid var(--border)" : ""};
           padding:0 8px 3px">${g}</th>`).join("")}</tr>
       <tr>
         ${["model", "", "messages", "input", "output", "re-read",
            "saved", "total", "≈ cost"].map((h, i) =>
           `<th style="text-align:${i < 2 ? "left" : "right"};
-            font-family:var(--mono);font-size:10.5px;letter-spacing:.06em;
-            text-transform:uppercase;color:var(--muted);font-weight:500;
+            font-family:var(--sans);font-size:11px;letter-spacing:.05em;
+            text-transform:uppercase;color:var(--sec);font-weight:600;
             padding:4px 0 6px;border-bottom:1px solid var(--border)">${h}</th>`
         ).join("")}</tr></thead>
       <tbody>${models.map((r) => `<tr>
         <td class="num" style="padding:8px 12px 8px 0;font-size:12.5px;
-          border-bottom:1px solid #F2F1EE">${r.model
+          border-bottom:1px solid var(--row)">${r.model
             .replace(/&/g, "&amp;").replace(/</g, "&lt;")}</td>
-        <td style="border-bottom:1px solid #F2F1EE;width:130px">
+        <td style="border-bottom:1px solid var(--row);width:130px">
           <div style="height:6px;border-radius:2px;background:var(--ink);
             opacity:.75;width:${Math.max(tot(r) / maxT * 110, 2).toFixed(0)}px">
           </div></td>
         <td class="num" style="text-align:right;font-size:12px;
-          border-bottom:1px solid #F2F1EE">${r.messages}</td>
+          border-bottom:1px solid var(--row)">${r.messages}</td>
         ${num(r.input)}${num(r.output)}${num(r.cache_read)}${num(r.cache_create)}
         <td class="num" style="text-align:right;font-size:12px;font-weight:600;
-          border-bottom:1px solid #F2F1EE">${fmtTok(tot(r))}</td>
+          border-bottom:1px solid var(--row)">${fmtTok(tot(r))}</td>
         <td class="num" style="text-align:right;font-size:12px;
           ${r.usd == null ? "color:var(--muted)" : ""};
-          border-bottom:1px solid #F2F1EE">${fmtUsd(r.usd)}</td>
+          border-bottom:1px solid var(--row)">${fmtUsd(r.usd)}</td>
       </tr>`).join("")}</tbody></table>`;
   }
 
@@ -354,7 +352,7 @@
     const label = `${String(hour).padStart(2, "0")}:00–` +
       `${String((hour + 1) % 24).padStart(2, "0")}:00`;
     box.innerHTML = `
-      <div style="border:1.5px solid #C9C7C1;border-radius:8px;
+      <div style="border:1.5px solid var(--panel-border);border-radius:8px;
         padding:16px 20px;margin-top:16px;background:var(--card)">
         <div style="display:flex;justify-content:space-between;
           align-items:baseline;margin-bottom:10px">
@@ -421,7 +419,7 @@
           datasets: keys.map((k) => ({
             label: COMP[k].label, data: rows.map((r) => r[k]),
             backgroundColor: css(COMP[k].v), stack: "t", borderRadius: 2,
-            maxBarThickness: 56, borderColor: "#111",
+            maxBarThickness: 56, borderColor: "#0a0a0a",
             borderWidth: rows.map((_, i) => i === selected ? 1.5 : 0),
             hidden: state.hidden.has(k) })) },
         options: {
@@ -436,7 +434,7 @@
                  ticks: { display: pi === PANELS.length - 1,
                           font: { family: "ui-monospace, Menlo",
                                   size: 10.5 } } },
-            y: { stacked: true, grid: { color: "#F2F1EE" },
+            y: { stacked: true, grid: { color: "var(--row)" },
                  border: { display: false },
                  ticks: { callback: (v) => fmtTok(v), maxTicksLimit: 4,
                           font: { family: "ui-monospace, Menlo",
@@ -463,9 +461,9 @@
     return `<table style="width:100%;border-collapse:collapse">
       <thead><tr>
         ${["session", "project", "consumer", "", "calls", "tokens", "duration"]
-          .map((h, i) => `<th style="font-family:var(--mono);font-size:10.5px;
-            letter-spacing:.06em;text-transform:uppercase;color:var(--muted);
-            font-weight:500;text-align:${i > 2 ? "right" : "left"};
+          .map((h, i) => `<th style="font-family:var(--sans);font-size:11px;
+            letter-spacing:.05em;text-transform:uppercase;color:var(--sec);
+            font-weight:600;text-align:${i > 2 ? "right" : "left"};
             padding:0 12px 8px 0;border-bottom:1px solid var(--border)">${h}</th>`)
           .join("")}</tr></thead>
       <tbody>${ev.map((e) => `<tr>
@@ -474,7 +472,7 @@
         <td class="num" style="font-size:12px">${projLabel(e.project, projectIds)}</td>
         <td class="num" style="font-size:12px">${e.consumer}</td>
         <td><span style="font-family:var(--mono);font-size:10px;
-          text-transform:uppercase;border-radius:9999px;padding:2px 9px;
+          text-transform:uppercase;border-radius:6px;padding:2px 9px;
           background:${tagCSS(e.type)}">
           ${e.type}</span></td>
         <td class="num" style="text-align:right">${e.calls}</td>
@@ -492,12 +490,13 @@
     const sortable = (k) => `data-sort="${k}" style="cursor:pointer;` +
       (state.sortKey === k ? "color:var(--ink);" : "") + `"`;
     const flag = (f) => f === "agree"
-      ? `<span data-tip="${FLAG_TIPS.agree}" style="font-family:var(--mono);
-          font-size:10px;color:var(--sec);border:1px solid var(--border);
-          border-radius:9999px;padding:2px 8px">high on both counts</span>`
-      : f ? `<span data-tip="${FLAG_TIPS[f]}" style="font-family:var(--mono);
-          font-size:10px;background:var(--red-bg);color:var(--red);
-          border-radius:9999px;padding:2px 8px">
+      ? `<span data-tip="${FLAG_TIPS.agree}" style="font-size:11px;
+          font-weight:600;background:var(--ok-bg);color:var(--ok);
+          border-radius:6px;padding:2px 8px">high on both counts</span>`
+      : f ? `<span data-tip="${FLAG_TIPS[f]}" style="font-size:11px;
+          font-weight:600;background:${f === "n1" ? "var(--red-bg)"
+            : "var(--tag-yellow-bg)"};color:${f === "n1" ? "var(--red)"
+            : "var(--tag-yellow)"};border-radius:6px;padding:2px 8px">
           ${f === "n1" ? "seen once" : "counts disagree"}</span>` : "";
     const bar = (v, mx, dim) => `<span style="display:inline-block;height:8px;
       border-radius:2px;background:var(--ink);opacity:${dim ? ".45" : ".85"};
@@ -507,33 +506,33 @@
     el.querySelector("#cLeague").innerHTML = `
       <table style="width:100%;border-collapse:collapse">
       <thead><tr>
-        <th style="text-align:left;font-family:var(--mono);font-size:10.5px;
-          letter-spacing:.06em;text-transform:uppercase;color:var(--muted);
-          font-weight:500;padding-bottom:8px;border-bottom:1px solid var(--border)">
+        <th style="text-align:left;font-family:var(--sans);font-size:11px;
+          letter-spacing:.05em;text-transform:uppercase;color:var(--sec);
+          font-weight:600;padding-bottom:8px;border-bottom:1px solid var(--border)">
           <span data-tip="Anything that uses your tokens and that you
           could act on — a skill, an MCP server, or a program you installed."
           style="border-bottom:1px dotted var(--muted);cursor:help"
           >consumer</span></th>
         <th></th>
-        <th style="text-align:right;font-family:var(--mono);font-size:10.5px;
-          letter-spacing:.06em;text-transform:uppercase;color:var(--muted);
-          font-weight:500;border-bottom:1px solid var(--border)">
+        <th style="text-align:right;font-family:var(--sans);font-size:11px;
+          letter-spacing:.05em;text-transform:uppercase;color:var(--sec);
+          font-weight:600;border-bottom:1px solid var(--border)">
           <span ${sortable("sessions")}>sessions${sortMark("sessions")}</span></th>
-        <th style="text-align:right;font-family:var(--mono);font-size:10.5px;
-          letter-spacing:.06em;text-transform:uppercase;color:var(--muted);
-          font-weight:500;border-bottom:1px solid var(--border)">
+        <th style="text-align:right;font-family:var(--sans);font-size:11px;
+          letter-spacing:.05em;text-transform:uppercase;color:var(--sec);
+          font-weight:600;border-bottom:1px solid var(--border)">
           <span data-tip="${LENS_A_TIP}" ${sortable("session_tokens")}>
           <span style="border-bottom:1px dotted var(--muted)">whole
           session tokens</span>${sortMark("session_tokens")}</span></th>
-        <th style="text-align:right;font-family:var(--mono);font-size:10.5px;
-          letter-spacing:.06em;text-transform:uppercase;color:var(--muted);
-          font-weight:500;border-bottom:1px solid var(--border)">
+        <th style="text-align:right;font-family:var(--sans);font-size:11px;
+          letter-spacing:.05em;text-transform:uppercase;color:var(--sec);
+          font-weight:600;border-bottom:1px solid var(--border)">
           <span data-tip="${LENS_B_TIP}" ${sortable("message_tokens")}>
           <span style="border-bottom:1px dotted var(--muted)">direct message
           tokens</span>${sortMark("message_tokens")}</span></th>
-        <th style="text-align:right;font-family:var(--mono);font-size:10.5px;
-          letter-spacing:.06em;text-transform:uppercase;color:var(--muted);
-          font-weight:500;border-bottom:1px solid var(--border)">
+        <th style="text-align:right;font-family:var(--sans);font-size:11px;
+          letter-spacing:.05em;text-transform:uppercase;color:var(--sec);
+          font-weight:600;border-bottom:1px solid var(--border)">
           uses · last 14 days</th>
         <th style="border-bottom:1px solid var(--border)"></th></tr></thead>
       <tbody>${(shown = rows.slice(0, 30)
@@ -552,24 +551,24 @@
           : ` style="`;
         return `<tr>
         <td class="num" style="padding:9px 12px 9px 0;font-size:12.5px;
-          border-bottom:1px solid #F2F1EE">${r.consumer}</td>
-        <td style="border-bottom:1px solid #F2F1EE"><span${ov}
+          border-bottom:1px solid var(--row)">${r.consumer}</td>
+        <td style="border-bottom:1px solid var(--row)"><span${ov}
           font-family:var(--mono);font-size:10px;text-transform:uppercase;
-          border-radius:9999px;padding:2px 9px;background:${tagCSS(r.type)}">${
+          border-radius:6px;padding:2px 9px;background:${tagCSS(r.type)}">${
             demoted ? "shell ·you" : r.type}</span></td>
         <td class="num" style="text-align:right;font-size:12px;
-          border-bottom:1px solid #F2F1EE">${r.sessions}</td>
+          border-bottom:1px solid var(--row)">${r.sessions}</td>
         <td class="num" style="text-align:right;font-size:12px;white-space:nowrap;
-          border-bottom:1px solid #F2F1EE">${bar(r.session_tokens, maxA)}
+          border-bottom:1px solid var(--row)">${bar(r.session_tokens, maxA)}
           ${fmtTok(r.session_tokens)}</td>
         <td class="num" style="text-align:right;font-size:12px;white-space:nowrap;
-          border-bottom:1px solid #F2F1EE">${bar(r.message_tokens, maxB, 1)}
+          border-bottom:1px solid var(--row)">${bar(r.message_tokens, maxB, 1)}
           ${fmtTok(r.message_tokens)}</td>
         <td class="cSpark" data-i="${ri}" data-tip="Click to enlarge with
           dated axes" style="text-align:right;cursor:pointer;
-          border-bottom:1px solid #F2F1EE">
+          border-bottom:1px solid var(--row)">
           ${sparkSVG(r.spark)}</td>
-        <td style="text-align:right;border-bottom:1px solid #F2F1EE">
+        <td style="text-align:right;border-bottom:1px solid var(--row)">
           ${flag(r.flag)}</td>
       </tr>`; }).join("")}</tbody></table>`;
     el.querySelectorAll("td.cSpark").forEach((c) =>

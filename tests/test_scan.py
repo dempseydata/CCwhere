@@ -138,6 +138,14 @@ class TestScan(unittest.TestCase):
         self.assertEqual(item["skills"][0]["name"], "gap")
         # content-free subfolder stays invisible
         self.assertNotIn("junk", [n["label"] for n in nodes])
+        # ...but an empty skills SCAFFOLD is shown as inventory
+        (proj / "scaffold" / ".claude" / "skills").mkdir(parents=True)
+        nodes = self._tree([{"project": "-p", "cwd": str(proj),
+                             "median": 9_000, "n": 3}])
+        sc = next(n for n in nodes if n["label"] == "scaffold")
+        self.assertTrue(sc["dormant"])
+        self.assertEqual(sc["items"][0]["tag"], "info")
+        self.assertIsNone(sc["items"][0]["tokens"])
         # visited nodes are never dormant
         self.assertFalse(nodes[1].get("dormant"))
 

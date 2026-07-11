@@ -271,7 +271,13 @@ def context_tree(projects, claude_home=None, stop_at=None):
         m = med.get(key, (None, None, None))
         items = _dir_items(d, home, reg, user_keys, project_dirname=m[2])
         if dormant and not items:
-            continue
+            cl = d / ".claude"
+            if not ((cl / "skills").is_dir() or (cl / "commands").is_dir()):
+                continue
+            items = [{"name": ".claude/skills (empty)", "tokens": None,
+                      "note": "Scaffold only — no skills inside, nothing"
+                              " can load from here", "tag": "info",
+                      "tag_text": "empty"}]
         parent = "~"
         for anc in d.parents:
             if str(anc) in depth_of:

@@ -64,8 +64,8 @@
     rows = [...rows].sort((a, b) =>
       (b[state.sortKey] ?? -1) - (a[state.sortKey] ?? -1));
     const th = (k, label, tip) => `<th style="text-align:right;
-        font-family:var(--mono);font-size:10.5px;letter-spacing:.06em;
-        text-transform:uppercase;color:var(--muted);font-weight:500;
+        font-family:var(--sans);font-size:11px;letter-spacing:.05em;
+        text-transform:uppercase;color:var(--sec);font-weight:600;
         border-bottom:1px solid var(--border)">
         <span data-sort="${k}"${tip ? ` data-tip="${tip}"` : ""}
           style="cursor:pointer">${label}${
@@ -73,40 +73,40 @@
     el.querySelector("#pTable").innerHTML = `
       <table style="width:100%;border-collapse:collapse">
       <thead><tr>
-        <th style="text-align:left;font-family:var(--mono);font-size:10.5px;
-          letter-spacing:.06em;text-transform:uppercase;color:var(--muted);
-          font-weight:500;padding-bottom:8px;
+        <th style="text-align:left;font-family:var(--sans);font-size:11px;
+          letter-spacing:.05em;text-transform:uppercase;color:var(--sec);
+          font-weight:600;padding-bottom:8px;
           border-bottom:1px solid var(--border)">tool</th>
         <th style="border-bottom:1px solid var(--border)"></th>
         ${keys.map(([k, l, tip]) => th(k, l, tip)).join("")}
         <th style="border-bottom:1px solid var(--border)"></th></tr></thead>
       <tbody>${rows.slice(0, 40).map((r) => `<tr>
         <td class="num" style="padding:8px 12px 8px 0;font-size:12.5px;
-          border-bottom:1px solid #F2F1EE">${r.consumer}</td>
-        <td style="border-bottom:1px solid #F2F1EE"><span style="
+          border-bottom:1px solid var(--row)">${r.consumer}</td>
+        <td style="border-bottom:1px solid var(--row)"><span style="
           font-family:var(--mono);font-size:10px;text-transform:uppercase;
-          border-radius:9999px;padding:2px 9px;background:${tagCSS(r.type)}">
+          border-radius:6px;padding:2px 9px;background:${tagCSS(r.type)}">
           ${r.type}</span></td>
         <td class="num" style="text-align:right;font-size:12px;
-          border-bottom:1px solid #F2F1EE">${r.calls}</td>
+          border-bottom:1px solid var(--row)">${r.calls}</td>
         <td class="num" style="text-align:right;font-size:12px;
-          border-bottom:1px solid #F2F1EE;${r.err_rate
+          border-bottom:1px solid var(--row);${r.err_rate
             ? "color:var(--red);font-weight:600" : "color:var(--muted)"}"
           ${r.err_rate ? `data-tip="${r.errors} of ${r.calls} calls errored"`
                        : ""}>${r.err_rate
             ? (r.err_rate * 100).toFixed(1) + "%" : "—"}</td>
         <td class="num" style="text-align:right;font-size:12px;
-          border-bottom:1px solid #F2F1EE">${fmtMs(r.p50)}</td>
+          border-bottom:1px solid var(--row)">${fmtMs(r.p50)}</td>
         <td class="num" style="text-align:right;font-size:12px;font-weight:600;
-          border-bottom:1px solid #F2F1EE">${fmtMs(r.p95)}</td>
+          border-bottom:1px solid var(--row)">${fmtMs(r.p95)}</td>
         <td class="num" style="text-align:right;font-size:12px;
-          color:var(--sec);border-bottom:1px solid #F2F1EE">${fmtMs(r.max)}</td>
-        <td style="text-align:right;border-bottom:1px solid #F2F1EE">${
+          color:var(--sec);border-bottom:1px solid var(--row)">${fmtMs(r.max)}</td>
+        <td style="text-align:right;border-bottom:1px solid var(--row)">${
           r.n_paired < 10 ? `<span data-tip="Only ${r.n_paired} calls
             returned with a measurable time — weak evidence at this sample
             size." style="font-family:var(--mono);font-size:10px;
             background:var(--tag-yellow-bg);color:var(--tag-yellow);
-            border-radius:9999px;padding:2px 8px;white-space:nowrap">
+            border-radius:6px;padding:2px 8px;white-space:nowrap">
             only ${r.n_paired} timed calls</span>` : ""}</td>
       </tr>`).join("")}</tbody></table>`;
     el.querySelectorAll("[data-sort]").forEach((h) =>

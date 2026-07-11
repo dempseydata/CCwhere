@@ -12,10 +12,10 @@
   const row = (r) => `
     <div style="display:grid;grid-template-columns:14px 220px 1fr 160px
       110px;gap:14px;align-items:baseline;padding:13px 0;
-      border-bottom:1px solid #F2F1EE">
+      border-bottom:1px solid var(--row)">
       <span style="width:9px;height:9px;border-radius:50%;align-self:center;
-        ${r.state === "running" ? "background:#3E9464"
-          : "border:1.5px solid #B8B6B0"}"></span>
+        ${r.state === "running" ? "background:var(--ok)"
+          : "border:1.5px solid var(--muted)"}"></span>
       <span style="font-family:var(--mono);font-size:12.5px">
         ${projLabel(r.project)}</span>
       <span style="font-size:12.5px;color:var(--sec)">${r.activity}

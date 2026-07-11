@@ -29,10 +29,10 @@ async function renderHeader() {
   $("syncAge").textContent = fmtAge(h.last_sync_age_s);
   const c = $("canary");
   if (h.drift_pct != null && h.drift_pct > h.canary_threshold_pct) {
-    c.textContent = `${h.drift_pct}% of the history couldn't be read — Claude Code's file format may have changed; update ccwhere`;
+    c.innerHTML = `<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--red);margin-right:5px"></span>${h.drift_pct}% of the history couldn't be read — Claude Code's file format may have changed; update ccwhere`;
     c.className = "firing";
   } else {
-    c.textContent = "all history readable";
+    c.innerHTML = `<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--ok);margin-right:5px"></span>all history readable`;
     c.className = "";
   }
 }

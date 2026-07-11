@@ -31,9 +31,9 @@ window.ccw = (function () {
   }
 
   function chipCSS(on) {
-    return `font-family:var(--mono);font-size:11.5px;border-radius:9999px;` +
+    return `font-family:var(--sans);font-size:12.5px;font-weight:500;border-radius:9999px;` +
       `padding:4px 12px;cursor:pointer;border:1px solid ` +
-      (on ? "#111;background:#111;color:#fff" :
+      (on ? "#111;background:#1c1c1e;color:#fff" :
             "var(--border);background:var(--card);color:var(--sec)");
   }
 
@@ -55,9 +55,9 @@ window.ccw = (function () {
   let tip = document.getElementById("tip");
   if (!tip) {
     tip = document.createElement("div"); tip.id = "tip";
-    tip.style.cssText = "position:fixed;pointer-events:none;background:#111;" +
+    tip.style.cssText = "position:fixed;pointer-events:none;background:#1c1c1e;" +
       "color:#fff;font-family:var(--mono);font-size:11px;line-height:1.5;" +
-      "padding:8px 10px;border-radius:6px;opacity:0;transition:opacity .12s;" +
+      "padding:8px 10px;border-radius:8px;opacity:0;transition:opacity .12s;" +
       "z-index:9;max-width:240px";
     document.body.appendChild(tip);
   }
@@ -99,7 +99,7 @@ window.ccw = (function () {
     const td = document.createElement("td");
     td.colSpan = colspan;
     td.innerHTML = `<div style="max-width:560px;margin:8px 0 14px;
-      padding:10px 12px 6px;border:1.5px solid #C9C7C1;border-radius:8px">
+      padding:10px 12px 6px;border:1.5px solid var(--panel-border);border-radius:8px">
       <div class="zoomModes" style="display:flex;gap:6px;
         justify-content:flex-end;margin-bottom:4px"></div>
       <div style="height:150px"><canvas></canvas></div></div>`;
